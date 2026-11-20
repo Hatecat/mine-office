@@ -1,0 +1,11 @@
+# Datos de tu oficina: token, equipo, conversaciones, gastos y registros (privados)
+data/
+# Dependencias y cachés
+node_modules/
+__pycache__/
+*.pyc
+# Copias y registros sueltos
+*.bak*
+*.log
+# Dibujos sueltos de los agentes
+/arte/

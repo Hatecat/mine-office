@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba de sala</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8ec5ff; font-family: ui-monospace, monospace; }
+  #info { position: fixed; left: 10px; top: 10px; padding: 6px 10px; background: #161a24e6; color: #eef; font-size: 14px; white-space: pre; }
+  #info.err { color: #ff6b6b; }
+</style>
+<script>
+  addEventListener('error', e => { const i = document.getElementById('info'); if (i) { i.className = 'err'; i.textContent = 'Error: ' + e.message; } });
+  addEventListener('unhandledrejection', e => { const i = document.getElementById('info'); if (i) { i.className = 'err'; i.textContent = 'Error: ' + e.reason; } });
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js"
+} }
+</script>
+</head>
+<body>
+<div id="info">cargando…</div>
+<script type="module">
+import * as V from './lib/voxel.js';
+import { roomShell, doorCells } from './lib/shell.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const { THREE } = V;
+const q = new URLSearchParams(location.search);
+const id = q.get('room') || 'cafeteria', view = q.get('view') || 'iso';
+const mod = await import(`./rooms/${id}.js?v=${Date.now()}`);
+const meta = mod.meta; const [W, D] = meta.size;
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8ec5ff);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xe4f1ff, 0x6b5843, 1.5));
+const sun = new THREE.DirectionalLight(0xfff0d0, 2.2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005;
+const S = Math.max(W, D) + 4;
+Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
+sun.position.set(W / 2 - 12, 24, D / 2 + 14); sun.target.position.set(W / 2, 0, D / 2); scene.add(sun, sun.target);
+
+scene.add(roomShell(meta));
+const opts = { variant: q.get('variant') || 'A' };
+const room = mod.default(V, opts); scene.add(room);
+
+// maniquíes en los sitios
+const skin = V.col(0xe0ac85), shirt = V.col(0x9b6cff), pants = V.col(0x3b4a6b);
+function mannequin(s) {
+  const root = new THREE.Group();
+  const sit = s.pose === 'sit';
+  const hip = sit ? (s.y || 0) + 0.11 : (s.y || 0) + 0.8;
+  const body = new THREE.Group(); body.position.y = hip; root.add(body);
+  body.add(V.box(0.5, 0.7, 0.28, shirt, 0, 0.35, 0), V.box(0.5, 0.5, 0.5, skin, 0, 0.95, 0), V.box(0.2, 0.08, 0.06, V.col(0x111111), 0, 1.0, 0.27));
+  for (const sx of [-0.36, 0.36]) body.add(V.box(0.2, 0.62, 0.2, shirt, sx, 0.34, 0));
+  for (const sx of [-0.13, 0.13]) {
+    if (sit) body.add(V.box(0.22, 0.22, 0.32, pants, sx, 0, 0.16), V.box(0.22, 0.5, 0.22, pants, sx, -0.25, 0.32));
+    else body.add(V.box(0.22, 0.8, 0.22, pants, sx, -0.4, 0));
+  }
+  root.position.set(s.x, 0, s.z); root.rotation.y = s.rotY || 0;
+  const tag = V.sign(s.activity || '?', 0.25, { color: '#ffe14d', bg: '#000a', px: 32 });
+  tag.position.set(0, hip + 1.55, 0); tag.onBeforeRender = (r, sc, cam) => tag.quaternion.copy(cam.quaternion);
+  root.add(tag);
+  return root;
+}
+const spots = room.userData.spots || [];
+for (const s of spots) scene.add(mannequin(s));
+// marca de puerta
+const [dz0, dz1] = doorCells(meta);
+const doorMark = V.box(0.9, 0.02, 1.9, V.glow(0x4cff7a), -1, 0.01, (dz0 + dz1) / 2); scene.add(doorMark);
+
+const c = new THREE.Vector3(W / 2 - 0.5, 0.5, D / 2 - 0.5); controls.target.copy(c);
+const R = Math.max(W, D) + 3;
+if (view === 'top') camera.position.set(c.x, R * 1.6, c.z + 0.01);
+else if (view === 'front') camera.position.set(c.x, R * 0.55, c.z + R * 1.3);
+else camera.position.set(c.x + R * 0.75, R * 0.85, c.z + R * 1.05);
+controls.update();
+
+let meshes = 0; room.traverse(o => { if (o.isMesh) meshes++; });
+document.getElementById('info').textContent =
+  `${meta.title} (${id})  ${W}×${D}  · ${meshes} meshes · ${spots.length} sitios\nverde = puerta · maniquí morado = sitio (mira hacia su cara)`;
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => { const dt = clock.getDelta(); room.userData.tick?.(dt, clock.elapsedTime); renderer.render(scene, camera); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Arranca la oficina de agentes (si no está ya) y la abre en el navegador.
+PORT="${PORT:-8765}"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+if ! curl -s -o /dev/null "http://127.0.0.1:$PORT/api/agents"; then
+  nohup python3 "$DIR/server.py" --port "$PORT" >/dev/null 2>&1 &
+  sleep 0.6
+fi
+URL="http://127.0.0.1:$PORT/$1"
+if flatpak info app.zen_browser.zen >/dev/null 2>&1; then
+  flatpak run app.zen_browser.zen "$URL" >/dev/null 2>&1 &
+else
+  xdg-open "$URL" >/dev/null 2>&1 &
+fi

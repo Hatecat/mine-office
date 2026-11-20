@@ -73,4 +73,5 @@ vendor/          three.js y OrbitControls (MIT)
 
 ## Licencia
 
-Sin licencia por ahora. `vendor/` conserva las licencias de sus autores (three.js, MIT).
+[Beerware (revisión 42)](LICENSE): haz lo que quieras con esto, conserva el aviso y, si algún día nos vemos y te ha servido, me debes una cerveza. 🍺
+`vendor/` conserva las licencias de sus autores (three.js, MIT).

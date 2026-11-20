@@ -75,3 +75,7 @@ vendor/          three.js y OrbitControls (MIT)
 
 [Beerware (revisión 42)](LICENSE): haz lo que quieras con esto, conserva el aviso y, si algún día nos vemos y te ha servido, me debes una cerveza. 🍺
 `vendor/` conserva las licencias de sus autores (three.js, MIT).
+
+### Sisterware (opcional y de cariño)
+
+Esto no es parte de la licencia, solo una tradición de la casa: si `mine-office` te sirvió, invita a una hermana a algo rico. 🍰 Si no tienes hermana, vale una amiga, una prima o quien haga de hermana.

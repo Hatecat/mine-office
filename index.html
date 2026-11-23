@@ -86,6 +86,15 @@
   .swatches { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
   .sw { width: 22px; height: 22px; border: 2px solid #0b0d13; cursor: pointer; padding: 0; box-shadow: none; }
   .sw.on { outline: 3px solid var(--sel); }
+  #dressForm [hidden] { display: none !important; }
+  .pmfb { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .pmfb li { min-width: 0; } .pmfb li span { min-width: 0; font-size: 15px; }
+  .pmfb ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 3px; }
+  .pmfb li { display: flex; align-items: center; gap: 4px; }
+  .pmfb li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pmfb li button { padding: 0 7px; min-width: 26px; }
+  .pmfb .fbadd { display: flex; gap: 5px; } .pmfb .fbadd select { flex: 1; min-width: 0; }
+  .pmfb.off ol, .pmfb.off .fbadd { opacity: .45; }
   .hint { grid-column: 1 / 3; color: var(--mut); font-size: 16px; margin: -4px 0 0; }
   .warn { color: #ffb4b4; }
   .dlg-foot { padding: 10px 16px 14px; border-top: 2px solid var(--line); display: flex; gap: 8px; }
@@ -163,12 +172,19 @@
       <label for="fJob">Cargo</label><input type="text" id="fJob" maxlength="40" placeholder="Programadora, Tester, Diseñador UX…">
       <label for="fTeam">Equipo</label><select id="fTeam"></select>
       <label for="fPersona">Personalidad</label><textarea id="fPersona" maxlength="1500" placeholder="Cómo es, cómo habla, en qué es bueno…"></textarea>
-      <label>Motor</label><div class="swatches"><label><input type="radio" name="fEngine" value="claude"> Claude</label><label><input type="radio" name="fEngine" value="opencode"> OpenCode</label></div>
+      <label>Motor</label><div class="swatches"><label><input type="radio" name="fEngine" value="claude"> Claude</label><label><input type="radio" name="fEngine" value="opencode"> OpenCode</label><label><input type="radio" name="fEngine" value="kimi"> Kimi</label></div>
       <label for="fModel">Modelo</label><div class="modelpick"><input type="search" id="fModelFilter" placeholder="Filtrar: free, gpt, copilot claude, nvidia…" autocomplete="off"><select id="fModel"></select><span id="fModelCount" class="mut"></span></div>
       <label for="fPerm">Permisos</label><select id="fPerm"></select>
       <p class="hint" id="permHint"></p>
       <label id="fSkillsRow">Habilidades</label><div id="fSkills" class="swatches"></div>
       <p class="hint" id="fSkillsHint">Herramientas que puede usar sin pedirte permiso, aunque sea de «solo leer». Solo con Claude.</p>
+      <label id="fPmRow">Modelos de reserva</label>
+      <div id="fPm" class="pmfb">
+        <label class="pmauto"><input type="checkbox" id="fAutoSwap"> Cambiar de modelo cuando alguien se quede sin cuota</label>
+        <ol id="fFbList"></ol>
+        <div class="fbadd"><select id="fFbAdd" aria-label="Modelo de reserva para añadir"></select><button type="button" class="mini" id="fFbAddBtn">Añadir</button></div>
+      </div>
+      <p class="hint" id="fPmHint">Solo el PM. Prueba la lista de arriba abajo y se salta durante 1 h los modelos que se agotan. Si la vacías, usa la lista de serie.</p>
       <label for="fCwd">Carpeta</label><input type="text" id="fCwd" placeholder="~/Documentos/proyecto">
       <p class="hint">Donde trabaja. Cambiar el motor o la carpeta le da una conversación nueva.</p>
       <label>Piel</label><div class="swatches" data-look="skin"></div>

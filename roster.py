@@ -3,6 +3,7 @@
 Los datos viven en data/roster.json. Cada miembro tiene una sesión propia y fija (Claude u OpenCode),
 así que recuerda todo lo que se le ha dicho, tanto desde el chat de la oficina como desde su ventana.
 """
+import glob
 import json
 import os
 import re
@@ -19,6 +20,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 ROSTER_FILE = os.path.join(DATA, "roster.json")
 OPENCODE_DB = os.path.join(HOME, ".local", "share", "opencode", "opencode.db")
+KIMI_HOME = os.path.join(HOME, ".kimi-code")
+KIMI_BIN = shutil.which("kimi") or os.path.join(KIMI_HOME, "bin", "kimi")
+ENGINES = ("claude", "opencode", "kimi")
 PERSONA_OPEN, PERSONA_CLOSE = "<<personaje>>", "<</personaje>>"
 
 CLAUDE_MODELS = [
@@ -206,7 +210,7 @@ def upsert_member(data):
         name = str(data.get("name", "")).strip()[:40]
         if not name:
             raise ValueError("Falta el nombre")
-        engine = data.get("engine") if data.get("engine") in ("claude", "opencode") else "claude"
+        engine = data.get("engine") if data.get("engine") in ENGINES else "claude"
         perm = data.get("permission") if data.get("permission") in PERMISSIONS else "default"
         team = data.get("team")
         if not any(t["id"] == team for t in r["teams"]):
@@ -229,11 +233,17 @@ def upsert_member(data):
             fields["job"] = str(data.get("job") or "").strip()[:40]
         if "role" in data:
             fields["role"] = data["role"] if data["role"] in ("", "pm") else ""
+        if "fallbacks" in data:     # solo tiene sentido en el PM: modelos de reserva, en orden de preferencia
+            fb = [str(x).strip() for x in (data.get("fallbacks") or []) if isinstance(x, str)]
+            fields["fallbacks"] = list(dict.fromkeys(x for x in fb if re.fullmatch(r"[\w.\-/:@]{3,100}", x)))[:12]
+        if "autoSwap" in data:
+            fields["autoSwap"] = bool(data.get("autoSwap"))
         mid = data.get("id")
         m = next((m for m in r["members"] if m["id"] == mid), None) if mid else None
         if m:
             if m.get("engine") != engine or m.get("cwd") != cwd:
                 m.pop("sessionId", None)   # otro motor o carpeta: sesión nueva
+                m.pop("kimiSession", None)
             m.update(fields)
         else:
             base = slug(name); mid = base; n = 2
@@ -287,9 +297,23 @@ def models():
             _oc_models = [l.strip() for l in out.splitlines() if "/" in l and " " not in l.strip()]
         except Exception:
             _oc_models = []
-    return {"claude": CLAUDE_MODELS, "opencode": [{"id": m, "name": m} for m in _oc_models],
-            "skills": [{"id": k, "name": v["name"]} for k, v in SKILLS.items()],
+    return {"claude": CLAUDE_MODELS, "opencode": [{"id": m, "name": m} for m in _oc_models], "kimi": kimi_models(),
+            "skills": [{"id": k, "name": v["name"]} for k, v in SKILLS.items()], "defaultFallbacks": DEFAULT_FALLBACKS,
             "permissions": [{"id": k, "name": v} for k, v in PERMISSIONS.items()]}
+
+
+def kimi_models():
+    """Modelos de Kimi Code según ~/.kimi-code/config.toml (el primero es el predeterminado)."""
+    try:
+        import tomllib
+        with open(os.path.join(KIMI_HOME, "config.toml"), "rb") as f:
+            cfg = tomllib.load(f)
+    except Exception:
+        return []
+    default = cfg.get("default_model")
+    out = [{"id": k, "name": f"{v.get('display_name') or k} ({k.split('/')[-1]})"} for k, v in (cfg.get("models") or {}).items()]
+    out.sort(key=lambda x: x["id"] != default)
+    return out
 
 
 # ---------------------------------------------------------------- sesiones
@@ -324,7 +348,9 @@ def ensure_session(m):
         else:
             mm = next(x for x in r["members"] if x["id"] == m["id"])
         if not mm.get("sessionId"):
-            mm["sessionId"] = str(uuid.uuid4()) if m["engine"] == "claude" else "ses_of" + uuid.uuid4().hex[:22]
+            mm["sessionId"] = (str(uuid.uuid4()) if m["engine"] == "claude" else
+                               "kimi_" + uuid.uuid4().hex[:22] if m["engine"] == "kimi" else   # id de la oficina; la sesión real va en kimiSession
+                               "ses_of" + uuid.uuid4().hex[:22])
             save(r)
         m["sessionId"] = mm["sessionId"]
         return m["sessionId"]
@@ -351,6 +377,24 @@ def _oc_has_session(sid):
         return ok
     except Exception:
         return False
+
+
+def _set_kimi_session(mid, ks):
+    """Kimi elige el id de su sesión: se apunta al acabar la primera orden para reanudarla con -S."""
+    with _lock:
+        r = load()
+        mm = next((x for x in r["members"] if x["id"] == mid), None)
+        if mm and mm.get("engine") == "kimi" and mm.get("kimiSession") != ks:
+            mm["kimiSession"] = ks
+            save(r)
+
+
+def kimi_wire(m):
+    ks = m.get("kimiSession")
+    if not ks:
+        return None
+    hits = glob.glob(os.path.join(KIMI_HOME, "sessions", "*", ks, "agents", "main", "wire.jsonl"))
+    return hits[0] if hits else None
 
 
 def _env(m):
@@ -392,7 +436,13 @@ class Run:
             except ValueError:
                 self.raw_tail = (self.raw_tail + [line])[-8:]
                 continue
+            if not isinstance(o, dict):       # p. ej. Kimi a veces imprime un número suelto
+                self.raw_tail = (self.raw_tail + [line])[-8:]
+                continue
             t = o.get("type")
+            if self.engine == "kimi" and "role" in o:
+                self._kimi_line(o, short_input)
+                continue
             if t == "assistant":
                 for b in (o.get("message") or {}).get("content") or []:
                     if isinstance(b, dict) and b.get("type") == "tool_use":
@@ -422,6 +472,8 @@ class Run:
                     self.tool = part.get("tool") or part.get("name")
                     self.detail = short_input(self.tool, (part.get("state") or {}).get("input") or {})
         rc = self.proc.wait()
+        if getattr(self, "kimi_session", None):
+            _set_kimi_session(self.member_id, self.kimi_session)
         if self.result is None and getattr(self, "last_text", None):
             self.result = self.last_text
         if rc != 0 and not self.error:
@@ -465,6 +517,38 @@ class Run:
             print("PM: fallo al gestionar el error:", e)
 
 
+def _kimi_line(self, o, short_input):
+    """Una línea de `kimi -p --output-format stream-json`: {role: assistant|tool|meta, ...}."""
+    role = o.get("role")
+    if role == "assistant":
+        for c in o.get("tool_calls") or []:
+            fn = c.get("function") or {}
+            try:
+                inp = json.loads(fn.get("arguments") or "{}")
+            except ValueError:
+                inp = {}
+            if "jefe.py investigar" in str(inp.get("command", "")):
+                self.delegated = True
+            self.tool = fn.get("name"); self.detail = short_input(self.tool, inp)
+            self.in_tool = True
+        content = o.get("content")
+        if isinstance(content, list):
+            content = "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+        if isinstance(content, str) and content.strip():
+            self.last_text = content
+    elif role == "tool":
+        self.in_tool = False
+    elif role == "meta":
+        if o.get("session_id"):
+            self.kimi_session = o["session_id"]
+        if o.get("type", "").startswith("error") or o.get("error"):
+            err = o.get("error") or o.get("content")
+            self.error = err.get("message") if isinstance(err, dict) else str(err)
+
+
+Run._kimi_line = _kimi_line
+
+
 def spoken_summary(text):
     """Línea «Resumen: …» de una respuesta (la piden los encargos de investigación), limpia para leerla en voz alta."""
     for line in (text or "").splitlines():
@@ -493,6 +577,20 @@ def send_order(mid, text, attempt=0, orig=None):
         cwd = os.path.expanduser(m["cwd"])
         if m["engine"] == "claude":
             args = _claude_args(m, False) + ["-p", text, "--output-format", "stream-json", "--verbose"]
+        elif m["engine"] == "kimi":
+            # `kimi -p` siempre corre en modo automático (no admite --auto ni otro modo de permisos):
+            # solo se lanza si el miembro tiene ese permiso explícitamente
+            if m.get("permission") != "bypassPermissions":
+                raise ValueError(f"{m['name']} usa Kimi, que en órdenes de la oficina siempre actúa sin preguntar. "
+                                 "Ponle el permiso «Sin preguntar nada» en el Vestuario o usa su ventana interactiva.")
+            ensure_session(m)
+            ks = m.get("kimiSession") if kimi_wire(m) else None
+            msg = text if ks else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
+            args = [KIMI_BIN, "-p", msg, "--output-format", "stream-json"]
+            if ks:
+                args += ["-S", ks]
+            if m.get("model"):
+                args += ["-m", m["model"]]
         else:
             sid = ensure_session(m)
             msg = text if _oc_has_session(sid) else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
@@ -537,6 +635,9 @@ def open_window(mid):
     cwd = os.path.expanduser(m["cwd"])
     if m["engine"] == "claude":
         cmd = _claude_args(m, True)
+    elif m["engine"] == "kimi":
+        cmd = [KIMI_BIN] + (["-S", m["kimiSession"]] if kimi_wire(m) else []) + (["-m", m["model"]] if m.get("model") else []) \
+            + (["--auto"] if m.get("permission") == "bypassPermissions" else [])
     else:
         cmd = ["opencode", "-s", ensure_session(m)] + (["--auto"] if m.get("permission") == "bypassPermissions" else [])
     title = f"{m['name']} · oficina"
@@ -588,6 +689,32 @@ def history(mid, limit=80):
                         out.append({"role": "assistant", "text": b["text"], "t": ts})
                     elif b.get("type") == "tool_use":
                         out.append({"role": "tool", "text": f"{b.get('name')}: {short_input(b.get('name'), b.get('input'))}".rstrip(": "), "t": ts})
+    elif m["engine"] == "kimi":
+        p = kimi_wire(m)
+        for rec in tail_lines(p, 600_000) if p else []:
+            if rec.get("type") != "agent.message.appended":
+                continue
+            msg = (rec.get("message") or {}).get("message") or {}
+            tc = rec.get("time")
+            ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(tc / 1000)) if tc else None
+            texts = [b.get("text", "") for b in msg.get("content") or [] if isinstance(b, dict) and b.get("type") == "text"]
+            if msg.get("role") == "user":
+                for tx in texts:
+                    if tx and not tx.startswith("<"):
+                        out.append({"role": "user", "text": _strip_persona(tx), "t": ts})
+            elif msg.get("role") == "assistant":
+                for tx in texts:
+                    if tx.strip():
+                        out.append({"role": "assistant", "text": tx, "t": ts})
+                for c in msg.get("toolCalls") or []:
+                    inp = c.get("arguments") or (c.get("function") or {}).get("arguments") or {}
+                    if isinstance(inp, str):
+                        try:
+                            inp = json.loads(inp)
+                        except ValueError:
+                            inp = {}
+                    name = c.get("name") or (c.get("function") or {}).get("name")
+                    out.append({"role": "tool", "text": f"{name}: {short_input(name, inp)}".rstrip(": "), "t": ts})
     elif m.get("sessionId"):
         try:
             db = sqlite3.connect(f"file:{OPENCODE_DB}?mode=ro", uri=True, timeout=1)
@@ -668,7 +795,7 @@ def member_agents(live, procs_opencode, oc_rows, collect_subagents, project_dir_
 # ---------------------------------------------------------------- PM: cambio de modelo al agotarse la cuota
 
 QUOTA_PATTERNS = re.compile(
-    r"usage limit|limit reached|hit your limit|rate.?limit|quota|credit balance|insufficient[_ ]?(quota|credits?|funds)"
+    r"usage limit|limit reached|hit your (\S+ )?limit|rate.?limit|quota|credit balance|insufficient[_ ]?(quota|credits?|funds)"
     r"|too many requests|\b429\b|\b402\b|payment required|out of (tokens|credits)|tokens? (exhausted|agotad)"
     r"|l[ií]mite de uso|cuota", re.I)
 # modelos gratuitos de reserva, en orden de preferencia (el PM puede tener su propia lista en "fallbacks")
@@ -686,6 +813,17 @@ PM_LOG = os.path.join(DATA, "pm.jsonl")
 
 def is_quota_error(text):
     return bool(QUOTA_PATTERNS.search(text or ""))
+
+
+def pm_fallbacks(pm):
+    """Lista de reserva del PM (o la de serie). «__ninguno__» era el antiguo «desactivado» puesto a mano."""
+    return [f for f in (pm.get("fallbacks") or []) if f != "__ninguno__"] or DEFAULT_FALLBACKS
+
+
+def pm_auto_swap(pm):
+    if "autoSwap" in pm:
+        return bool(pm["autoSwap"])
+    return pm.get("fallbacks") != ["__ninguno__"]
 
 
 def find_pm(r=None):
@@ -710,11 +848,15 @@ def pm_handle_quota(member, error, run):
             return
         cur = m.get("model") or ""
         _exhausted[cur] = now
-        avail = {x["id"] for x in models()["opencode"]}
-        choices = [f for f in (pm.get("fallbacks") or DEFAULT_FALLBACKS)
-                   if f != cur and now - _exhausted.get(f, 0) > 3600 and (not avail or f in avail)]
         pm_sid = ensure_session(pm)
         import server
+        if not pm_auto_swap(pm):
+            server.add_event(pm_sid, "PM", f"{m['name']} se quedó sin cuota (tengo desactivado el cambio automático de modelo)")
+            _pm_log({"t": now, "member": m["id"], "from": cur, "to": None, "error": error[:200], "auto": False})
+            return
+        avail = {x["id"] for x in models()["opencode"]}
+        choices = [f for f in pm_fallbacks(pm)
+                   if f != cur and now - _exhausted.get(f, 0) > 3600 and (not avail or f in avail)]
         if not choices:
             server.add_event(pm_sid, "PM", f"{m['name']} se quedó sin cuota y no me quedan modelos gratuitos libres")
             _pm_log({"t": now, "member": m["id"], "from": cur, "to": None, "error": error[:200]})

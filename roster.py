@@ -14,6 +14,7 @@ import threading
 import time
 import uuid
 
+import ajustes
 import plataforma
 
 HOME = os.path.expanduser("~")
@@ -71,7 +72,7 @@ JEFE = os.path.join(HERE, "tools", "jefe.py")
 API = "http://127.0.0.1:8765/api/agents"
 JEFE_PROMPT = (
     "\n\nSi para tu tarea necesitas algo que no puedes hacer tú (instalar o descargar algo, un permiso, una decisión, "
-    "ayuda de otro equipo), NO lances subagentes ni te saltes una denegación: pídeselo al jefe de la oficina, Claude. "
+    "ayuda de otro equipo), NO lances subagentes ni te saltes una denegación: pídeselo al jefe de la oficina ({JEFE_NOMBRE}). "
     "No es una herramienta aparte: es un comando que ejecutas con Bash (ya tienes permiso): "
     f"python3 {JEFE} pedir \"qué necesitas, para qué y cualquier dato útil (rutas, tamaños, opciones)\". "
     "Liberty, la secretaria, se lo anuncia al usuario, y la respuesta de Claude te llegará como un mensaje nuevo en tu chat. "
@@ -134,6 +135,7 @@ def load():
         with open(ROSTER_FILE) as f:
             r = json.load(f)
         r.setdefault("teams", []); r.setdefault("members", []); r.setdefault("boss", BOSS_DEFAULT)
+        r["boss"] = {**r["boss"], "name": ajustes.cargar()["jefe"]}   # el nombre del jefe lo eliges al empezar
         return r
 
 
@@ -157,7 +159,7 @@ VIRTUAL = {
     "jefe": {"name": "Claude", "job": "Jefe", "model": "claude-opus-5-5", "cwd": "~", "permission": "auto",
              "allowed": [f"Bash(python3 {JEFE} *)", "Bash(curl -s http://127.0.0.1:8765/api/*)"],
              "prompt": (
-                 "Eres Claude, el jefe de la oficina de agentes de tu usuario (la oficina está en ~/agent-office y el "
+                 "Eres {JEFE_NOMBRE}, el jefe de la oficina de agentes de tu usuario (la oficina está en ~/agent-office y el "
                  "equipo en ~/agent-office/data/roster.json). Te escribe desde el chat de la oficina. Ojo: esta es una "
                  "conversación aparte de la ventana principal de Claude Code; compartís la memoria (MEMORY.md) pero no "
                  "el historial, así que si te pregunta por algo de esa ventana que no esté en la memoria, dilo. "
@@ -192,7 +194,8 @@ def virtual_member(mid, r=None):
         return None
     r = r or load()
     sid = (r.get("virtual") or {}).get(mid, {}).get("sessionId")
-    return {"id": mid, "name": v["name"], "job": v["job"], "engine": "claude", "model": v["model"], "cwd": v["cwd"],
+    nombre = ajustes.cargar()["jefe"] if mid == "jefe" else v["name"]
+    return {"id": mid, "name": nombre, "job": v["job"], "engine": "claude", "model": v["model"], "cwd": v["cwd"],
             "permission": v.get("permission", "default"), "team": None, "virtual": True, "sessionId": sid}
 
 
@@ -301,6 +304,7 @@ def models():
             _oc_models = []
     return {"claude": CLAUDE_MODELS, "opencode": [{"id": m, "name": m} for m in _oc_models], "kimi": kimi_models(),
             "skills": [{"id": k, "name": v["name"]} for k, v in SKILLS.items()], "defaultFallbacks": DEFAULT_FALLBACKS,
+            "motores": ajustes.cargar()["motores"],
             "permissions": [{"id": k, "name": v} for k, v in PERMISSIONS.items()]}
 
 
@@ -327,7 +331,7 @@ def _team_name(m):
 
 def persona(m):
     if m.get("virtual"):
-        return VIRTUAL[m["id"]]["prompt"]
+        return VIRTUAL[m["id"]]["prompt"].replace("{JEFE_NOMBRE}", ajustes.cargar()["jefe"])
     return _persona(m)
 
 
@@ -336,7 +340,7 @@ def _persona(m):
     return (f"Eres {m['name']}, {cargo} del equipo «{_team_name(m)}» de la oficina de agentes de tu usuario. "
             f"Tu personalidad: {m.get('personality') or 'profesional y amable'}. "
             "Mantén esta personalidad en tu forma de hablar sin dejar de ser útil, honesto y preciso. Responde en español."
-            + JEFE_PROMPT
+            + JEFE_PROMPT.replace("{JEFE_NOMBRE}", ajustes.cargar()["jefe"])
             + "".join("\n\n" + SKILLS[k]["prompt"] for k in m.get("skills") or [] if k in SKILLS))
 
 
@@ -565,6 +569,23 @@ def spoken_summary(text):
     return None
 
 
+def _aplicar_ahorro(m, sid):
+    """Modo ahorro: si el modelo de OpenCode es de pago, usa el primer gratuito libre de la lista de reserva."""
+    if m.get("engine") != "opencode" or not m.get("model") or ajustes.es_gratis(m["model"]) \
+            or ajustes.cargar()["ahorro"] != "gratis":
+        return m
+    now = time.time()
+    pm = find_pm()
+    avail = {x["id"] for x in models()["opencode"]}
+    libre = next((f for f in (pm_fallbacks(pm) if pm else DEFAULT_FALLBACKS)
+                  if ajustes.es_gratis(f) and f in avail and now - _exhausted.get(f, 0) > 3600), None)
+    if not libre:
+        return m
+    import server
+    server.add_event(sid, "Ahorro", f"Uso {libre} en vez de {m['model']} (modo ahorro)")
+    return {**m, "model": libre}
+
+
 def send_order(mid, text, attempt=0, orig=None):
     text = str(text or "").strip()
     if not text:
@@ -595,6 +616,7 @@ def send_order(mid, text, attempt=0, orig=None):
                 args += ["-m", m["model"]]
         else:
             sid = ensure_session(m)
+            m = _aplicar_ahorro(m, sid)
             msg = text if _oc_has_session(sid) else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
             # --standalone: el servicio de fondo a veces no ve proveedores recién conectados (p. ej. Copilot)
             args = [plataforma.which("opencode") or "opencode", "run", "--standalone", "-s", sid, "--format", "json", "--title", m["name"]]

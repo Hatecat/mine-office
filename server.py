@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import ajustes
 import plataforma
+import voz
 import roster
 import usage
 import secretaria
@@ -535,10 +536,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(usage.report())
             if path == "/api/models":
                 return self.send_json(roster.models())
+            if path == "/api/voz/estado":
+                return self.send_json(voz.estado())
             if path == "/api/ajustes":
                 gratis = [m["id"] for m in roster.models()["opencode"] if ajustes.es_gratis(m["id"])]
                 return self.send_json({"ajustes": ajustes.cargar(), "detectados": ajustes.detectar(),
-                                       "gratisOpenCode": gratis})
+                                       "gratisOpenCode": gratis, "voz": voz.estado()})
             if path == "/api/chat":
                 from urllib.parse import unquote
                 return self.send_json(roster.history(unquote(q.get("id", ""))))
@@ -576,6 +579,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"error": str(e)}, 400)
                 ajustes.guardar(limpios)
                 return self.send_json(limpios)
+            if path == "/api/voz/descargar":
+                return self.send_json({"iniciada": voz.iniciar(), **voz.estado()})
             if path == "/api/member":
                 return self.send_json(roster.upsert_member(body))
             if path == "/api/team":

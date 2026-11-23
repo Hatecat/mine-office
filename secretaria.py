@@ -17,10 +17,21 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import plataforma
+import voz
+
 HOME = os.path.expanduser("~")
-LIBERTY = os.path.join(HOME, "liberty")
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "data")
+LIBERTY_PROPIA = os.path.join(HOME, "liberty")     # proyecto de voz de Liberty, si lo tienes instalado a mano
+DATA = plataforma.DATA_DIR
+
+
+def _liberty():
+    """Carpeta de la voz: la que descargaste desde Ajustes o, si no, tu proyecto ~/liberty."""
+    return voz.DIR if voz.instalada() or not os.path.isdir(LIBERTY_PROPIA) else LIBERTY_PROPIA
+
+
+def _py(d):
+    return voz._py_venv(os.path.join(d, "tts-venv"))
 CONF = os.path.join(DATA, "office.json")
 EVENTS = os.path.join(DATA, "events.jsonl")
 TTS_PORT = 5002
@@ -53,13 +64,13 @@ def set_voice(on):
 def liberty_tts_settings():
     tts, models = {"engine": "piper", "voice": "es_MX-claude-high", "speed": 1}, "models"
     try:
-        with open(os.path.join(LIBERTY, "settings.json")) as f:
+        with open(os.path.join(_liberty(), "settings.json")) as f:
             s = json.load(f)
         tts.update(s.get("tts") or {})
         models = s.get("modelsDir") or models
     except (OSError, ValueError):
         pass
-    return tts, os.path.normpath(os.path.join(LIBERTY, models))
+    return tts, os.path.normpath(os.path.join(_liberty(), models))
 
 
 # ---------------------------------------------------------------- voz
@@ -72,13 +83,13 @@ def _port_open():
 def ensure_tts():
     if _port_open():
         return True
-    py = os.path.join(LIBERTY, "tts-venv", "bin", "python")
-    script = os.path.join(LIBERTY, "tts_server.py")
+    py = _py(_liberty())
+    script = os.path.join(_liberty(), "tts_server.py")
     if not (os.path.exists(py) and os.path.exists(script)):
         return False
     log = open(os.path.join(DATA, "tts.log"), "ab")
-    subprocess.Popen([py, script], cwd=LIBERTY, env=dict(os.environ, TTS_PORT=str(TTS_PORT)),
-                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+    subprocess.Popen([py, script], cwd=_liberty(), env=dict(os.environ, TTS_PORT=str(TTS_PORT)),
+                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, **plataforma.new_group_kwargs())
     for _ in range(40):
         if _port_open():
             return True
@@ -106,14 +117,14 @@ def _stt_get(path, data=None, timeout=10):
 def stt_status():
     """Arranca (si hace falta) el transcriptor Whisper de Liberty en CPU y dice si ya está listo."""
     if not _stt_open():
-        py = os.path.join(LIBERTY, "tts-venv", "bin", "python")
-        script = os.path.join(LIBERTY, "stt_server.py")
+        py = _py(_liberty())
+        script = os.path.join(_liberty(), "stt_server.py")
         if not (os.path.exists(py) and os.path.exists(script)):
-            return {"state": "error", "error": "No encuentro el transcriptor de Liberty en ~/liberty"}
+            return {"state": "error", "error": "La voz no está instalada: descárgala desde Ajustes"}
         log = open(os.path.join(DATA, "stt.log"), "ab")
         env = dict(os.environ, STT_PORT=str(STT_PORT), CUDA_VISIBLE_DEVICES="")    # CPU: la GPU es para el arte
-        subprocess.Popen([py, script], cwd=LIBERTY, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                         start_new_session=True)
+        subprocess.Popen([py, script], cwd=_liberty(), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                         **plataforma.new_group_kwargs())
         for _ in range(60):
             if _stt_open():
                 break
@@ -136,10 +147,20 @@ def synth(text):
 
 
 def _player():
+    if plataforma.WIN:
+        return "winsound"
     for p in ("pw-play", "paplay", "aplay"):
         if shutil.which(p):
             return p
     return None
+
+
+def _reproducir(player, path):
+    if player == "winsound":        # Windows: sin procesos externos
+        import winsound
+        winsound.PlaySound(path, winsound.SND_FILENAME)
+    else:
+        subprocess.run([player, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
 
 
 def _worker():
@@ -155,7 +176,7 @@ def _worker():
             speaking_until = time.time() + 30
             player = _player()
             if player:
-                subprocess.run([player, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+                _reproducir(player, path)
             os.remove(path)
         except Exception as e:  # noqa: BLE001 - la voz nunca debe tumbar la oficina
             print("Liberty: no pude hablar:", e)

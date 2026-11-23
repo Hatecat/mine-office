@@ -9,3 +9,5 @@ __pycache__/
 *.log
 # Dibujos sueltos de los agentes
 /arte/
+build/
+dist/

@@ -14,10 +14,12 @@ import threading
 import time
 import uuid
 
+import plataforma
+
 HOME = os.path.expanduser("~")
 CLAUDE = os.path.join(HOME, ".claude")
-HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "data")
+HERE = plataforma.HERE
+DATA = plataforma.DATA_DIR
 ROSTER_FILE = os.path.join(DATA, "roster.json")
 OPENCODE_DB = os.path.join(HOME, ".local", "share", "opencode", "opencode.db")
 KIMI_HOME = os.path.join(HOME, ".kimi-code")
@@ -293,7 +295,7 @@ def models():
     if _oc_models is None or time.time() - _oc_models_t > 120:   # se refresca: pueden conectarse proveedores nuevos
         _oc_models_t = time.time()
         try:
-            out = subprocess.run(["opencode", "models", "--standalone"], capture_output=True, text=True, timeout=20).stdout
+            out = subprocess.run([plataforma.which("opencode") or "opencode", "models", "--standalone"], capture_output=True, text=True, timeout=20).stdout
             _oc_models = [l.strip() for l in out.splitlines() if "/" in l and " " not in l.strip()]
         except Exception:
             _oc_models = []
@@ -399,12 +401,12 @@ def kimi_wire(m):
 
 def _env(m):
     """Cada agente sabe quién es (lo usa tools/jefe.py para firmar las peticiones)."""
-    return dict(os.environ, OFFICE_MEMBER=m["id"])
+    return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR)
 
 
 def _claude_args(m, interactive):
     sid = ensure_session(m)
-    args = ["claude"]
+    args = [plataforma.which("claude") or "claude"]
     args += ["--resume", sid] if claude_transcript(m) else ["--session-id", sid]
     args += ["-n", m["name"], "--append-system-prompt", persona(m), "--permission-mode", m.get("permission") or "default"]
     allowed = VIRTUAL[m["id"]]["allowed"] if m.get("virtual") else [f"Bash(python3 {JEFE} pedir *)"] + [t for k in m.get("skills") or [] for t in SKILLS.get(k, {}).get("allowed", [])]
@@ -595,7 +597,7 @@ def send_order(mid, text, attempt=0, orig=None):
             sid = ensure_session(m)
             msg = text if _oc_has_session(sid) else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
             # --standalone: el servicio de fondo a veces no ve proveedores recién conectados (p. ej. Copilot)
-            args = ["opencode", "run", "--standalone", "-s", sid, "--format", "json", "--title", m["name"]]
+            args = [plataforma.which("opencode") or "opencode", "run", "--standalone", "-s", sid, "--format", "json", "--title", m["name"]]
             if m.get("model"):
                 args += ["-m", m["model"]]
             if m.get("permission") == "bypassPermissions":
@@ -604,7 +606,7 @@ def send_order(mid, text, attempt=0, orig=None):
         if not shutil.which(args[0]):
             raise ValueError(f"No encuentro el programa {args[0]}")
         proc = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, env=_env(m),
-                                stderr=subprocess.STDOUT, text=True, start_new_session=True)
+                                stderr=subprocess.STDOUT, text=True, **plataforma.new_group_kwargs())
         run = _runs[mid] = Run(m, proc)
         run.prompt = text; run.attempt = attempt; run.orig = orig or text
         try:
@@ -619,31 +621,46 @@ def stop(mid):
         run = _runs.get(mid)
         if run and not run.done:
             try:
-                os.killpg(run.proc.pid, 15)
+                plataforma.kill_tree(run.proc.pid)
             except OSError:
                 pass
             run.error = "Detenido desde la oficina"; run.stopped = True
+
+
+def _cmd_interactivo(m):
+    """Comando para abrir la sesión de un miembro en su ventana interactiva."""
+    if m["engine"] == "claude":
+        return _claude_args(m, True)
+    auto = ["--auto"] if m.get("permission") == "bypassPermissions" else []
+    if m["engine"] == "kimi":
+        return [KIMI_BIN] + (["-S", m["kimiSession"]] if kimi_wire(m) else []) \
+            + (["-m", m["model"]] if m.get("model") else []) + auto
+    return [plataforma.which("opencode") or "opencode", "-s", ensure_session(m)] + auto
+
+
+def _ventana_windows(m, cmd_args):
+    """En Windows abre una consola nueva con la sesión (kitty y konsole son de Linux).
+    Se lanza el binario directamente, sin pasar por cmd.exe: los argumentos pueden llevar texto del usuario
+    (p. ej. la personalidad) y cmd.exe interpretaría &, | o %."""
+    cwd = os.path.expanduser(m["cwd"])
+    subprocess.Popen(cmd_args, cwd=cwd, env=_env(m), creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 
 def open_window(mid):
     m = get_member(mid)
     if not m:
         raise ValueError("No existe ese miembro")
+    cmd = _cmd_interactivo(m)
+    if plataforma.WIN:
+        return _ventana_windows(m, cmd)
     term = shutil.which("kitty") or shutil.which("konsole")
     if not term:
         raise ValueError("No encuentro kitty ni konsole")
     cwd = os.path.expanduser(m["cwd"])
-    if m["engine"] == "claude":
-        cmd = _claude_args(m, True)
-    elif m["engine"] == "kimi":
-        cmd = [KIMI_BIN] + (["-S", m["kimiSession"]] if kimi_wire(m) else []) + (["-m", m["model"]] if m.get("model") else []) \
-            + (["--auto"] if m.get("permission") == "bypassPermissions" else [])
-    else:
-        cmd = ["opencode", "-s", ensure_session(m)] + (["--auto"] if m.get("permission") == "bypassPermissions" else [])
     title = f"{m['name']} · oficina"
     full = [term, "--title", title, "--directory", cwd, *cmd] if term.endswith("kitty") else [term, "--workdir", cwd, "-p", f"tabtitle={title}", "-e", *cmd]
     subprocess.Popen(full, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     env=_env(m), start_new_session=True)
+                     env=_env(m), **plataforma.new_group_kwargs())
 
 
 def run_state(mid):
@@ -956,7 +973,7 @@ def watchdog_tick(now=None):
             run.hung = True
             run.error = f"Colgado: {int(quiet // 60)} min sin dar señales"
             try:
-                os.killpg(run.proc.pid, 15)
+                plataforma.kill_tree(run.proc.pid)
             except OSError:
                 pass
 

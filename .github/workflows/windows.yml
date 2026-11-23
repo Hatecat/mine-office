@@ -1,0 +1,26 @@
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar PyInstaller
+        run: pip install pyinstaller
+      - name: Empaquetar
+        run: pyinstaller --noconfirm oficina.spec
+      - name: Comprimir
+        shell: pwsh
+        run: Compress-Archive -Path dist/OficinaDeAgentes -DestinationPath OficinaDeAgentes-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OficinaDeAgentes-windows
+          path: OficinaDeAgentes-windows.zip

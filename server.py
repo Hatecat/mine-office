@@ -10,10 +10,12 @@ import json
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import plataforma
 import roster
 import usage
 import secretaria
@@ -25,11 +27,7 @@ SUBAGENT_STALE = 15 * 60  # s sin escribir => se considera muerto aunque no marq
 
 
 def pid_alive(pid):
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except (OSError, ValueError, TypeError):
-        return False
+    return plataforma.pid_alive(pid)
 
 
 def tail_lines(path, max_bytes=96_000):
@@ -482,7 +480,7 @@ def add_event(sid, ev, msg="", limit=200):
 
 def _load_token():
     """El token sobrevive a los reinicios: así las pestañas abiertas siguen funcionando."""
-    path = os.path.join(HERE, "data", "token")
+    path = os.path.join(plataforma.DATA_DIR, "token")
     try:
         with open(path) as f:
             t = f.read().strip()
@@ -614,16 +612,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send(200, data, self.STATIC_TYPES[ext])
 
 
-if __name__ == "__main__":
-    import sys
+def main(argv=None):
+    global PORT
     sys.modules.setdefault("server", sys.modules[__name__])  # roster.py importa utilidades de aquí
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8765)
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     PORT = a.port
     usage.start_background()
     roster.start_watchdog()
     start_stuck_watch()
     secretaria.start()
-    print(f"Oficina de agentes en http://127.0.0.1:{a.port}")
+    print(f"Oficina de agentes en http://127.0.0.1:{a.port}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

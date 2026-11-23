@@ -13,7 +13,6 @@ Quién pide se sabe por la variable OFFICE_MEMBER, que la oficina pone al lanzar
 Las peticiones viven en data/peticiones.json; cada una deja un aviso en events.jsonl (globo + Liberty).
 """
 import argparse
-import fcntl
 import json
 import os
 import sys
@@ -22,7 +21,19 @@ import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA = os.path.join(HERE, "data")
+DATA = os.environ.get("OFICINA_DATOS") or os.path.join(HERE, "data")   # la oficina lo pone al lanzar a cada agente
+
+try:
+    import fcntl
+
+    def _bloquear(f, bloquear):
+        fcntl.flock(f, fcntl.LOCK_EX if bloquear else fcntl.LOCK_UN)
+except ImportError:                      # Windows
+    import msvcrt
+
+    def _bloquear(f, bloquear):
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK if bloquear else msvcrt.LK_UNLCK, 1)
 FILE = os.path.join(DATA, "peticiones.json")
 EVENTS = os.path.join(DATA, "events.jsonl")
 SERVER = "http://127.0.0.1:8765"
@@ -33,7 +44,7 @@ class Store:
     def __enter__(self):
         os.makedirs(DATA, exist_ok=True)
         self.f = open(FILE, "a+")
-        fcntl.flock(self.f, fcntl.LOCK_EX)
+        _bloquear(self.f, True)
         self.f.seek(0)
         try:
             self.data = json.loads(self.f.read() or "{}")
@@ -47,7 +58,7 @@ class Store:
         if exc[0] is None:
             self.f.seek(0); self.f.truncate()
             json.dump(self.data, self.f, ensure_ascii=False, indent=1)
-        fcntl.flock(self.f, fcntl.LOCK_UN)
+        _bloquear(self.f, False)
         self.f.close()
 
 

@@ -17,6 +17,29 @@ Todo corre en tu máquina, sin servicios externos propios: un servidor de Python
 - **Secretaria con voz** (`secretaria.py`): lee en voz alta los avisos y, opcionalmente, escucha por el micrófono («Liberty, …»). Usa un servidor de voz local que **no va en este repositorio** (ver más abajo).
 - **Estudio de arte** (`tools/arte/`): imágenes y modelos 3D con un ComfyUI local (Animagine, Flux y Hunyuan3D).
 
+## Primer uso
+
+Al abrir la oficina por primera vez aparece el asistente de configuración:
+
+- **Nombre del jefe.** Por defecto «Claude». Es quien recibe las peticiones de tus agentes. Puedes cambiarlo luego con **⚙ Ajustes**.
+- **Motores.** Se detectan los instalados (Claude Code, OpenCode y Kimi Code). Los desactivados no aparecen al contratar.
+- **Ahorro.** «Normal», o «Preferir gratis»: los agentes de OpenCode usan un modelo gratuito cuando el suyo es de pago. Los de Claude no cambian, van con tu suscripción.
+
+Los proveedores de modelos (OpenAI, Mistral, NVIDIA…) se añaden en cada motor, no en la oficina: en OpenCode con `opencode auth`, en Kimi con su propio comando.
+
+Los ajustes se guardan en `data/ajustes.json`.
+
+## Windows
+
+Hay un workflow (`.github/workflows/windows.yml`) que genera `OficinaDeAgentes-windows.zip` con PyInstaller. Para probarlo en tu PC:
+
+1. Descomprime el zip y ejecuta `OficinaDeAgentes.exe`. Se abre la oficina en el navegador.
+2. Los datos (`data/`) quedan junto al ejecutable.
+3. Los agentes necesitan Python 3 para `tools/jefe.py` y los hooks. Instálalo desde python.org y comprueba que `python` o `py` responden en la terminal.
+4. Claude Code y OpenCode deben estar instalados y en el `PATH`.
+
+Aún no se ha probado en Windows: el empaquetado está verificado en Linux. La ventana de cada agente usa la consola de Windows, y las ventanas de kitty y konsole son solo de Linux.
+
 ## Requisitos
 
 - Python 3.11 o superior y un navegador moderno.
@@ -55,7 +78,11 @@ Los globos usan los hooks de Claude Code. Añade esto a `~/.claude/settings.json
 
 ## Voz de la secretaria
 
-`secretaria.py` espera encontrar un proyecto de voz local en `~/liberty` (con `tts_server.py` y, para escuchar, `stt_server.py`, y un entorno `tts-venv`). Ese proyecto no forma parte de este repositorio. Sin él, todo lo demás funciona y la voz queda desactivada.
+Liberty habla y escucha, pero la voz no viene en el paquete. Se descarga desde **⚙ Ajustes → Voz de la secretaria** (unos 1 GB, con Python 3 instalado en el equipo). Crea un entorno en `data/voz/tts-venv`, instala `piper-tts` y `faster-whisper` en CPU, y baja el modelo de voz Piper `es_AR-daniela-high` y Whisper `small`.
+
+Si ya tienes el proyecto de voz de Liberty en `~/liberty`, la oficina lo usa a falta de la descarga. Sin voz, todo lo demás funciona; Liberty sigue en el chat.
+
+Los servidores de voz están en `voz/` (`tts_server.py` y `stt_server.py`). El código de la descarga está en `voz.py`.
 
 ## Estructura
 

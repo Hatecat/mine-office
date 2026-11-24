@@ -430,10 +430,12 @@ def _python_cmd():
 
 
 # Permisos del Vestuario traducidos a OpenCode. «bypassPermissions» usa --auto (ver send_order).
-# Se niega la shell en los dos modos restrictivos: en una orden no hay nadie para aprobarla.
+# Los modos restrictivos empiezan denegándolo todo y permiten solo lectura. No se fusionan con las reglas
+# heredadas de la configuración del usuario: ni sus permisos ni sus servidores MCP valen en esos modos.
+_LECTURA = {"read": "allow", "glob": "allow", "grep": "allow", "list": "allow"}
 PERMISOS_OC = {
-    "default": {"edit": "deny", "bash": "deny"},
-    "acceptEdits": {"edit": "allow", "bash": "deny"},
+    "default": {"*": "deny", **_LECTURA},
+    "acceptEdits": {"*": "deny", **_LECTURA, "edit": "allow"},
 }
 
 
@@ -442,9 +444,9 @@ def _env_oc(m):
     del estudio con permiso solo para sus dos herramientas. Si la configuración del usuario no se puede leer,
     se usa solo lo que pone la oficina."""
     e = _env(m)
-    base = PERMISOS_OC.get(m.get("permission"), {})
+    base = PERMISOS_OC.get(m.get("permission"))
     estudio = "arte" in _skills_efectivas(m)
-    if not base and not estudio:
+    if base is None and not estudio:
         return e
     try:
         cfg = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
@@ -452,12 +454,14 @@ def _env_oc(m):
         cfg = {}
     if not isinstance(cfg, dict):
         cfg = {}
-    perm = cfg.get("permission") if isinstance(cfg.get("permission"), dict) else {}
-    mcp = cfg.get("mcp") if isinstance(cfg.get("mcp"), dict) else {}
-    cfg["permission"] = {**perm, **base}
+    if base is not None:
+        cfg["permission"] = dict(base)          # reglas nuevas, sin las heredadas
+        cfg["mcp"] = {}                         # sin servidores MCP propios del usuario
     if estudio:
+        mcp = cfg.get("mcp") if isinstance(cfg.get("mcp"), dict) else {}
+        perm = cfg.get("permission") if isinstance(cfg.get("permission"), dict) else {}
         cfg["mcp"] = {**mcp, "arte": {"type": "local", "command": _python_cmd() + [ARTE_MCP], "enabled": True}}
-        cfg["permission"].update({"arte_generar_imagen": "allow", "arte_estado": "allow"})
+        cfg["permission"] = {**perm, "arte_generar_imagen": "allow", "arte_estado": "allow"}
     e["OPENCODE_CONFIG_CONTENT"] = json.dumps(cfg)
     return e
 

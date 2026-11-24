@@ -238,12 +238,18 @@ class ImagenesTest(unittest.TestCase):
     def test_permiso_solo_leer_niega_editar_y_shell(self):
         import json as _j
         e = roster._env_oc({"id": "x", "engine": "opencode", "permission": "default", "imagenes": "propio", "skills": []})
-        self.assertEqual(_j.loads(e["OPENCODE_CONFIG_CONTENT"])["permission"], {"edit": "deny", "bash": "deny"})
+        perm = _j.loads(e["OPENCODE_CONFIG_CONTENT"])["permission"]
+        self.assertEqual(perm["*"], "deny")
+        self.assertNotIn("bash", perm)
+        self.assertEqual(perm["read"], "allow")
 
     def test_permiso_editar_permite_editar_pero_no_shell(self):
         import json as _j
         e = roster._env_oc({"id": "x", "engine": "opencode", "permission": "acceptEdits", "imagenes": "propio", "skills": []})
-        self.assertEqual(_j.loads(e["OPENCODE_CONFIG_CONTENT"])["permission"], {"edit": "allow", "bash": "deny"})
+        perm = _j.loads(e["OPENCODE_CONFIG_CONTENT"])["permission"]
+        self.assertEqual(perm["*"], "deny")
+        self.assertEqual(perm["edit"], "allow")
+        self.assertNotIn("bash", perm)
 
     def test_sin_preguntar_no_añade_restricciones(self):
         self.assertNotIn("OPENCODE_CONFIG_CONTENT", roster._env_oc({"id": "x", "engine": "opencode", "permission": "bypassPermissions", "imagenes": "propio", "skills": []}))

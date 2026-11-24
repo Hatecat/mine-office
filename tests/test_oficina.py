@@ -3,6 +3,7 @@
 Ejecutar desde la carpeta del proyecto:  python3 -m unittest discover -s tests -v
 Usan una carpeta temporal para OFICINA_DATOS, así que no tocan data/ del proyecto.
 """
+import json
 import os
 import subprocess
 import sys
@@ -155,6 +156,58 @@ class PresupuestoTest(unittest.TestCase):
         ajustes.guardar({**ajustes.DEFECTO, "presupuestoDia": 0, "configurado": True})
         with mock.patch.object(usage, "gasto_hoy", return_value=500.0):
             roster._freno_presupuesto({"model": "claude-opus-5-5"})
+
+
+class ModelosLocalesTest(unittest.TestCase):
+    def setUp(self):
+        import modelos_locales
+        self.dir = tempfile.mkdtemp(prefix="ml-")
+        self.p = [mock.patch.object(modelos_locales, "CONFIG", os.path.join(self.dir, "opencode.json")),
+                  mock.patch.object(modelos_locales, "REGISTRO", os.path.join(self.dir, "reg.json"))]
+        for x in self.p:
+            x.start()
+        self.ml = modelos_locales
+
+    def tearDown(self):
+        for x in self.p:
+            x.stop()
+
+    def test_solo_servidores_de_este_equipo(self):
+        with self.assertRaises(ValueError):
+            self.ml.validar({"nombre": "x1", "url": "http://otro.com:11434", "modelos": ["a"]})
+        with self.assertRaises(ValueError):
+            self.ml.validar({"nombre": "x1", "url": "http://127.0.0.1", "modelos": ["a"]})
+        n, base, m = self.ml.validar({"nombre": "ollama", "url": "http://localhost:11434/algo", "modelos": "llama3.2, qwen"})
+        self.assertEqual((n, base, m), ("ollama", "http://localhost:11434/v1", ["llama3.2", "qwen"]))
+
+    def test_agregar_y_quitar_sin_tocar_lo_de_a_mano(self):
+        cfg = os.path.join(self.dir, "opencode.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"provider": {"nvidia": {"models": {}}}, "permission": {"webfetch": "allow"}}, f)
+        self.ml.agregar({"nombre": "ollama", "url": "http://127.0.0.1:11434", "modelos": ["llama3.2"]})
+        c = json.load(open(cfg, encoding="utf-8"))
+        self.assertIn("nvidia", c["provider"])
+        self.assertEqual(c["provider"]["ollama"]["options"]["baseURL"], "http://127.0.0.1:11434/v1")
+        self.assertEqual(c["permission"], {"webfetch": "allow"})
+        self.ml.quitar("ollama")
+        c = json.load(open(cfg, encoding="utf-8"))
+        self.assertNotIn("ollama", c["provider"])
+        self.assertIn("nvidia", c["provider"])
+
+    def test_no_pisa_un_proveedor_a_mano(self):
+        cfg = os.path.join(self.dir, "opencode.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"provider": {"groq": {"models": {}}}}, f)
+        with self.assertRaises(ValueError):
+            self.ml.agregar({"nombre": "groq", "url": "http://127.0.0.1:1234", "modelos": ["a"]})
+
+    def test_no_toca_una_configuracion_invalida(self):
+        cfg = os.path.join(self.dir, "opencode.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            f.write("{ esto no es json")
+        with self.assertRaises(ValueError):
+            self.ml.agregar({"nombre": "ollama", "url": "http://127.0.0.1:11434", "modelos": ["a"]})
+        self.assertEqual(open(cfg, encoding="utf-8").read(), "{ esto no es json")
 
 
 class CuotaTest(unittest.TestCase):

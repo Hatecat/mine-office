@@ -20,6 +20,7 @@ import plataforma
 import voz
 import roster
 import usage
+import modelos_locales
 import secretaria
 
 HOME = os.path.expanduser("~")
@@ -542,7 +543,7 @@ class Handler(BaseHTTPRequestHandler):
                 gratis = [m["id"] for m in roster.models()["opencode"] if ajustes.es_gratis(m["id"])]
                 return self.send_json({"ajustes": ajustes.cargar(), "detectados": ajustes.detectar(),
                                        "gratisOpenCode": gratis, "proveedores": ajustes.proveedores_opencode(),
-                                       "gastoHoy": usage.gasto_hoy(),
+                                       "gastoHoy": usage.gasto_hoy(), "locales": modelos_locales.listar(),
                                        "voz": voz.estado()})
             if path == "/api/chat":
                 from urllib.parse import unquote
@@ -581,6 +582,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"error": str(e)}, 400)
                 ajustes.guardar(limpios)
                 return self.send_json(limpios)
+            if path in ("/api/modelos-locales", "/api/modelos-locales/quitar"):
+                try:
+                    reg = modelos_locales.agregar(body) if path == "/api/modelos-locales" \
+                        else modelos_locales.quitar(body.get("nombre"))
+                except ValueError as e:
+                    return self.send_json({"error": str(e)}, 400)
+                roster._oc_models = None          # el Vestuario verá los modelos nuevos sin esperar
+                return self.send_json({"locales": reg})
             if path == "/api/voz/descargar":
                 return self.send_json({"iniciada": voz.iniciar(), **voz.estado()})
             if path == "/api/member":

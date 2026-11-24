@@ -69,7 +69,7 @@ SKILLS = {
 }
 
 JEFE = os.path.join(HERE, "tools", "jefe.py")
-API = "http://127.0.0.1:8765/api/agents"
+API = f"http://127.0.0.1:{plataforma.PUERTO}/api/agents"
 JEFE_PROMPT = (
     "\n\nSi para tu tarea necesitas algo que no puedes hacer tú (instalar o descargar algo, un permiso, una decisión, "
     "ayuda de otro equipo), NO lances subagentes ni te saltes una denegación: pídeselo al jefe de la oficina ({JEFE_NOMBRE}). "
@@ -157,10 +157,10 @@ def slug(text):
 # que con el resto, cada uno con su propia conversación de Claude.
 VIRTUAL = {
     "jefe": {"name": "Claude", "job": "Jefe", "model": "claude-opus-5-5", "cwd": "~", "permission": "auto",
-             "allowed": [f"Bash(python3 {JEFE} *)", "Bash(curl -s http://127.0.0.1:8765/api/*)"],
+             "allowed": [f"Bash(python3 {JEFE} *)", f"Bash(curl -s http://127.0.0.1:{plataforma.PUERTO}/api/*)"],
              "prompt": (
-                 "Eres {JEFE_NOMBRE}, el jefe de la oficina de agentes de tu usuario (la oficina está en ~/agent-office y el "
-                 "equipo en ~/agent-office/data/roster.json). Te escribe desde el chat de la oficina. Ojo: esta es una "
+                 f"Eres {{JEFE_NOMBRE}}, el jefe de la oficina de agentes de tu usuario (la oficina está en {HERE} y el "
+                 f"equipo en {DATA}/roster.json). Te escribe desde el chat de la oficina. Ojo: esta es una "
                  "conversación aparte de la ventana principal de Claude Code; compartís la memoria (MEMORY.md) pero no "
                  "el historial, así que si te pregunta por algo de esa ventana que no esté en la memoria, dilo. "
                  f"Puedes ver al equipo con: curl -s {API} . Las peticiones que te hacen los agentes: python3 {JEFE} lista; "
@@ -174,7 +174,7 @@ VIRTUAL = {
                  "sigue siendo cosa tuya. "
                  "Responde en español, con claridad y sin rodeos.")},
     "liberty": {"name": "Liberty", "job": "Secretaria", "model": "claude-sonnet-5-5", "cwd": "~",
-                "allowed": ["Bash(curl -s http://127.0.0.1:8765/api/*)", f"Bash(python3 {JEFE} lista*)", f"Bash(python3 {JEFE} pedir *)",
+                "allowed": [f"Bash(curl -s http://127.0.0.1:{plataforma.PUERTO}/api/*)", f"Bash(python3 {JEFE} lista*)", f"Bash(python3 {JEFE} pedir *)",
                             f"Bash(python3 {JEFE} investigar *)"],
                 "prompt": (
                     "Eres Liberty, la secretaria de la oficina de agentes de tu usuario: cálida, eficiente y con chispa. "
@@ -405,7 +405,7 @@ def kimi_wire(m):
 
 def _env(m):
     """Cada agente sabe quién es (lo usa tools/jefe.py para firmar las peticiones)."""
-    return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR)
+    return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR, OFICINA_PUERTO=str(plataforma.PUERTO))
 
 
 def _claude_args(m, interactive):

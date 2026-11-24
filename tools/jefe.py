@@ -36,7 +36,7 @@ except ImportError:                      # Windows
         msvcrt.locking(f.fileno(), msvcrt.LK_LOCK if bloquear else msvcrt.LK_UNLCK, 1)
 FILE = os.path.join(DATA, "peticiones.json")
 EVENTS = os.path.join(DATA, "events.jsonl")
-SERVER = "http://127.0.0.1:8765"
+SERVER = f"http://127.0.0.1:{os.environ.get('OFICINA_PUERTO') or 8765}"
 
 
 class Store:

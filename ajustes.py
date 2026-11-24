@@ -1,7 +1,11 @@
 """Ajustes de la oficina: nombre del jefe, motores instalados y modo de ahorro. Se guardan en data/ajustes.json."""
 import json
 import os
+import re
+import subprocess
 import threading
+
+import plataforma
 
 from plataforma import DATA_DIR, which
 
@@ -65,6 +69,24 @@ def detectar():
     """Qué motores están instalados en este equipo."""
     kimi = which("kimi") or (KIMI_BIN_FALLBACK if os.path.exists(KIMI_BIN_FALLBACK) else None)
     return {"claude": bool(which("claude")), "opencode": bool(which("opencode")), "kimi": bool(kimi)}
+
+
+def proveedores_opencode():
+    """Proveedores de OpenCode con clave guardada (opencode auth list)."""
+    exe = which("opencode")
+    if not exe:
+        return []
+    try:
+        out = subprocess.run([exe, "auth", "list"], capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    nombres = []
+    for linea in out.splitlines():
+        if "stored" in linea.lower():
+            col = re.split(r"\s{2,}", linea.strip())[0]
+            if col and col not in nombres:
+                nombres.append(col)
+    return nombres
 
 
 def es_gratis(model_id):

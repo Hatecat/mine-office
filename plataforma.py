@@ -14,6 +14,25 @@ DATA_DIR = os.environ.get("OFICINA_DATOS") or (
     os.path.join(os.path.dirname(sys.executable), "data") if FROZEN else os.path.join(HERE, "data"))
 
 
+def _puerto():
+    """Puerto de la oficina: OFICINA_PUERTO o --port (antes de importar nada), 8765 por defecto."""
+    v = os.environ.get("OFICINA_PUERTO")
+    for i, a in enumerate(sys.argv):
+        if v:
+            break
+        if a == "--port" and i + 1 < len(sys.argv):
+            v = sys.argv[i + 1]
+        elif a.startswith("--port="):
+            v = a.split("=", 1)[1]
+    try:
+        return int(v) if v else 8765
+    except ValueError:
+        return 8765
+
+
+PUERTO = _puerto()
+
+
 def which(name):
     """Ruta del binario (en Windows resuelve .cmd y .exe; subprocess no lo hace solo)."""
     return shutil.which(name)

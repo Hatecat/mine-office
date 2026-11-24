@@ -3,9 +3,10 @@
 import threading
 import webbrowser
 
+import plataforma
 import server
 
-PORT = 8765
+PORT = plataforma.PUERTO
 
 
 def abrir():

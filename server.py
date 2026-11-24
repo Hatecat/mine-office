@@ -499,7 +499,7 @@ def _load_token():
 
 
 TOKEN = _load_token()
-PORT = 8765
+PORT = plataforma.PUERTO
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -541,7 +541,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/ajustes":
                 gratis = [m["id"] for m in roster.models()["opencode"] if ajustes.es_gratis(m["id"])]
                 return self.send_json({"ajustes": ajustes.cargar(), "detectados": ajustes.detectar(),
-                                       "gratisOpenCode": gratis, "voz": voz.estado()})
+                                       "gratisOpenCode": gratis, "proveedores": ajustes.proveedores_opencode(),
+                                       "voz": voz.estado()})
             if path == "/api/chat":
                 from urllib.parse import unquote
                 return self.send_json(roster.history(unquote(q.get("id", ""))))
@@ -633,7 +634,7 @@ def main(argv=None):
     global PORT
     sys.modules.setdefault("server", sys.modules[__name__])  # roster.py importa utilidades de aquí
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=plataforma.PUERTO)
     a = ap.parse_args(argv)
     PORT = a.port
     usage.start_background()

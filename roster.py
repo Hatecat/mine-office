@@ -410,7 +410,7 @@ def _env(m):
 
 def _claude_args(m, interactive):
     sid = ensure_session(m)
-    args = [plataforma.which("claude") or "claude"]
+    args = [plataforma.binario("claude")]
     args += ["--resume", sid] if claude_transcript(m) else ["--session-id", sid]
     args += ["-n", m["name"], "--append-system-prompt", persona(m), "--permission-mode", m.get("permission") or "default"]
     allowed = VIRTUAL[m["id"]]["allowed"] if m.get("virtual") else [f"Bash(python3 {JEFE} pedir *)"] + [t for k in m.get("skills") or [] for t in SKILLS.get(k, {}).get("allowed", [])]
@@ -609,7 +609,7 @@ def send_order(mid, text, attempt=0, orig=None):
             ensure_session(m)
             ks = m.get("kimiSession") if kimi_wire(m) else None
             msg = text if ks else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
-            args = [KIMI_BIN, "-p", msg, "--output-format", "stream-json"]
+            args = [plataforma.ejecutable_seguro(KIMI_BIN), "-p", msg, "--output-format", "stream-json"]
             if ks:
                 args += ["-S", ks]
             if m.get("model"):
@@ -619,7 +619,7 @@ def send_order(mid, text, attempt=0, orig=None):
             m = _aplicar_ahorro(m, sid)
             msg = text if _oc_has_session(sid) else f"{PERSONA_OPEN}{persona(m)}{PERSONA_CLOSE}\n\n{text}"
             # --standalone: el servicio de fondo a veces no ve proveedores recién conectados (p. ej. Copilot)
-            args = [plataforma.which("opencode") or "opencode", "run", "--standalone", "-s", sid, "--format", "json", "--title", m["name"]]
+            args = [plataforma.binario("opencode"), "run", "--standalone", "-s", sid, "--format", "json", "--title", m["name"]]
             if m.get("model"):
                 args += ["-m", m["model"]]
             if m.get("permission") == "bypassPermissions":
@@ -657,7 +657,7 @@ def _cmd_interactivo(m):
     if m["engine"] == "kimi":
         return [KIMI_BIN] + (["-S", m["kimiSession"]] if kimi_wire(m) else []) \
             + (["-m", m["model"]] if m.get("model") else []) + auto
-    return [plataforma.which("opencode") or "opencode", "-s", ensure_session(m)] + auto
+    return [plataforma.binario("opencode"), "-s", ensure_session(m)] + auto
 
 
 def _ventana_windows(m, cmd_args):

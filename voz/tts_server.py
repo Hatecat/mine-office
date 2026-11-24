@@ -9,6 +9,17 @@ from urllib.parse import urlparse, parse_qs
 import numpy as np
 
 PORT = int(os.environ.get("TTS_PORT", "5002"))
+
+TOKEN = os.environ.get("VOZ_TOKEN", "")      # secreto que pone la oficina: sin él no atiende a nadie
+MODELOS = os.environ.get("VOZ_DIR", "")      # carpeta de modelos fijada al arrancar (no la elige quien llama)
+PERMITIDOS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+
+
+def autorizada(h):
+    """Solo peticiones de este equipo, con el Host esperado y el secreto de la oficina (contra DNS rebinding y CSRF)."""
+    import hmac
+    return (bool(TOKEN) and h.headers.get("Host", "") in PERMITIDOS
+            and hmac.compare_digest(h.headers.get("X-Voz-Token", ""), TOKEN))
 KOKORO_ES = ["ef_dora", "em_alex", "em_santa"]       # voces en español de Kokoro v1.0
 SAFE = re.compile(r"^[\w.-]+$")
 _cache, _lock = {}, threading.Lock()                  # modelos cargados / un solo sintetizador a la vez
@@ -55,7 +66,7 @@ def synth(req):
     text = str(req["text"]).strip()
     if not text:
         raise ValueError("Texto vacío")
-    d, engine, voice = req["dir"], req.get("engine", "piper"), req.get("voice", "")
+    d, engine, voice = MODELOS, req.get("engine", "piper"), req.get("voice", "")
     speed = float(req.get("speed", 1))
     with _lock:
         if engine == "kokoro":
@@ -89,22 +100,28 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 
     def do_GET(self):
+        if not autorizada(self):
+            return self.reply(403, "text/plain", b"prohibido")
         u = urlparse(self.path)
         try:
             if u.path == "/voices":
-                d = parse_qs(u.query)["dir"][0]
+                d = MODELOS
                 return self.reply(200, "application/json", json.dumps(list_voices(d)).encode())
             self.reply(404, "text/plain", b"no")
         except Exception as e:
             self.reply(500, "text/plain", str(e).encode())
 
     def do_POST(self):
+        if not autorizada(self):
+            return self.reply(403, "text/plain", b"prohibido")
         try:
-            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            req = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 200_000)))
             self.reply(200, "audio/wav", synth(req))
         except Exception as e:
             self.reply(500, "text/plain", str(e).encode())
 
 
+if not TOKEN or not MODELOS:
+    raise SystemExit("Falta VOZ_TOKEN o VOZ_DIR: el servidor lo arranca la oficina")
 print(f"TTS listo en :{PORT}", flush=True)
 ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

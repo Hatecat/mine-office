@@ -7,6 +7,7 @@ si no, arranca solo ese servidor (sin el avatar ni la transcripción, que usan l
 import json
 import os
 import queue
+import secrets
 import shutil
 import socket
 import subprocess
@@ -20,6 +21,7 @@ import urllib.request
 import plataforma
 import voz
 
+VOZ_TOKEN = secrets.token_urlsafe(24)   # la oficina y sus servidores de voz lo comparten; cambia en cada arranque
 HOME = os.path.expanduser("~")
 LIBERTY_PROPIA = os.path.join(HOME, "liberty")     # proyecto de voz de Liberty, si lo tienes instalado a mano
 DATA = plataforma.DATA_DIR
@@ -88,7 +90,7 @@ def ensure_tts():
     if not (os.path.exists(py) and os.path.exists(script)):
         return False
     log = open(os.path.join(DATA, "tts.log"), "ab")
-    subprocess.Popen([py, script], cwd=_liberty(), env=dict(os.environ, TTS_PORT=str(TTS_PORT)),
+    subprocess.Popen([py, script], cwd=_liberty(), env=dict(os.environ, TTS_PORT=str(TTS_PORT), VOZ_TOKEN=VOZ_TOKEN, VOZ_DIR=liberty_tts_settings()[1]),
                      stdin=subprocess.DEVNULL, stdout=log, stderr=log, **plataforma.new_group_kwargs())
     for _ in range(40):
         if _port_open():
@@ -106,7 +108,7 @@ def _stt_open():
 def _stt_get(path, data=None, timeout=10):
     _, models_dir = liberty_tts_settings()
     q = urllib.parse.urlencode({"model": STT_MODEL, "dir": models_dir, "hot": "Liberty"})
-    req = urllib.request.Request(f"http://127.0.0.1:{STT_PORT}{path}?{q}", data=data)
+    req = urllib.request.Request(f"http://127.0.0.1:{STT_PORT}{path}?{q}", data=data, headers={"X-Voz-Token": VOZ_TOKEN})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read())
@@ -122,7 +124,7 @@ def stt_status():
         if not (os.path.exists(py) and os.path.exists(script)):
             return {"state": "error", "error": "La voz no está instalada: descárgala desde Ajustes"}
         log = open(os.path.join(DATA, "stt.log"), "ab")
-        env = dict(os.environ, STT_PORT=str(STT_PORT), CUDA_VISIBLE_DEVICES="")    # CPU: la GPU es para el arte
+        env = dict(os.environ, STT_PORT=str(STT_PORT), CUDA_VISIBLE_DEVICES="", VOZ_TOKEN=VOZ_TOKEN, VOZ_DIR=liberty_tts_settings()[1])    # CPU: la GPU es para el arte
         subprocess.Popen([py, script], cwd=_liberty(), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                          **plataforma.new_group_kwargs())
         for _ in range(60):
@@ -141,7 +143,7 @@ def transcribe(raw):
 def synth(text):
     tts, models_dir = liberty_tts_settings()
     body = json.dumps({"text": text, **tts, "dir": models_dir}).encode()
-    req = urllib.request.Request(f"http://127.0.0.1:{TTS_PORT}/tts", data=body)
+    req = urllib.request.Request(f"http://127.0.0.1:{TTS_PORT}/tts", data=body, headers={"X-Voz-Token": VOZ_TOKEN})
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.read()
 

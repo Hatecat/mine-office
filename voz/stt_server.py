@@ -7,6 +7,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 PORT = int(os.environ.get("STT_PORT", "5003"))
+
+TOKEN = os.environ.get("VOZ_TOKEN", "")      # secreto que pone la oficina: sin él no atiende a nadie
+MODELOS = os.environ.get("VOZ_DIR", "")      # carpeta de modelos fijada al arrancar (no la elige quien llama)
+PERMITIDOS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+
+
+def autorizada(h):
+    """Solo peticiones de este equipo, con el Host esperado y el secreto de la oficina (contra DNS rebinding y CSRF)."""
+    import hmac
+    return (bool(TOKEN) and h.headers.get("Host", "") in PERMITIDOS
+            and hmac.compare_digest(h.headers.get("X-Voz-Token", ""), TOKEN))
 ALLOWED = {"tiny", "base", "small", "medium", "large-v3-turbo", "large-v3"}
 
 
@@ -94,10 +105,12 @@ class H(BaseHTTPRequestHandler):
 
     def params(self):
         q = parse_qs(urlparse(self.path).query)
-        root = os.path.join(q.get("dir", ["."])[0], "whisper")
+        root = os.path.join(MODELOS, "whisper")
         return q.get("model", ["small"])[0], root, q.get("hot", [""])[0][:40]
 
     def do_GET(self):
+        if not autorizada(self):
+            return self.reply(403, {"error": "prohibido"})
         try:
             name, root, _ = self.params()
             ensure(name, root)
@@ -106,9 +119,11 @@ class H(BaseHTTPRequestHandler):
             self.reply(400, {"error": str(e)})
 
     def do_POST(self):
+        if not autorizada(self):
+            return self.reply(403, {"error": "prohibido"})
         try:
             name, root, hot = self.params()
-            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            raw = self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 4_000_000))
             ensure(name, root)
             if state["state"] != "ready" or state["model"] != name:
                 return self.reply(503, {"error": "El modelo de transcripción aún se está cargando", **state})
@@ -119,5 +134,7 @@ class H(BaseHTTPRequestHandler):
             self.reply(500, {"error": str(e)})
 
 
+if not TOKEN or not MODELOS:
+    raise SystemExit("Falta VOZ_TOKEN o VOZ_DIR: el servidor lo arranca la oficina")
 print(f"STT listo en :{PORT}", flush=True)
 ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

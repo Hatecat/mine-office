@@ -19,6 +19,20 @@ def which(name):
     return shutil.which(name)
 
 
+def ejecutable_seguro(ruta):
+    """Ruta lista para lanzar con argumentos que llevan texto del usuario.
+    En Windows, un .cmd o .bat pasa por cmd.exe, que interpreta &, | y %: se rechaza y se pide el .exe."""
+    if WIN and ruta and ruta.lower().endswith((".cmd", ".bat")):
+        raise ValueError(f"{os.path.basename(ruta)} es un script ({ruta}) y en Windows no se le puede pasar texto "
+                         "sin riesgo. Instala la versión nativa (.exe) de ese programa.")
+    return ruta
+
+
+def binario(nombre):
+    """Binario para lanzar con texto del usuario: resuelto y comprobado."""
+    return ejecutable_seguro(which(nombre) or nombre)
+
+
 def new_group_kwargs():
     """Argumentos de Popen para lanzar un proceso en su propio grupo (para poder pararlo entero)."""
     if WIN:

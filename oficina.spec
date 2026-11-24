@@ -21,6 +21,6 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="MineOffice",
-    console=False,          # con consola: los errores se ven. Cámbialo a False cuando esté probado.
+    console=False,          # sin ventana de consola; si el exe falla al arrancar, pon True para ver el error.
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="MineOffice")

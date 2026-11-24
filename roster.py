@@ -113,7 +113,7 @@ def _default_roster():
         "teams": [{"id": t, "name": "Equipo Alfa", "color": "#e0a030"}],
         "members": [
             {"id": "rocio", "name": "Rocío", "team": t, "engine": "claude", "model": "claude-sonnet-5-5",
-             "permission": "acceptEdits", "cwd": "~",
+             "permission": "default", "cwd": "~",
              "personality": "Programadora meticulosa y tranquila. Explica lo justo, revisa dos veces antes de tocar nada y no soporta los atajos chapuceros.",
              "look": {"skin": "#e0ac85", "hair": "#2b1d14", "shirt": "#f08a3c", "pants": "#3b4a6b", "accessory": "gafas"}},
             {"id": "bruno", "name": "Bruno", "team": t, "engine": "claude", "model": "claude-haiku-5-5",
@@ -429,22 +429,35 @@ def _python_cmd():
     return [sys.executable]
 
 
+# Permisos del Vestuario traducidos a OpenCode. «bypassPermissions» usa --auto (ver send_order).
+# Se niega la shell en los dos modos restrictivos: en una orden no hay nadie para aprobarla.
+PERMISOS_OC = {
+    "default": {"edit": "deny", "bash": "deny"},
+    "acceptEdits": {"edit": "allow", "bash": "deny"},
+}
+
+
 def _env_oc(m):
-    """Entorno de OpenCode. Con el estudio local, registra el servidor MCP del estudio y permite sus dos
-    herramientas (argumentos tipados, sin shell). Si la configuración del usuario no se puede leer, no añade nada."""
+    """Entorno de OpenCode: aplica el permiso del Vestuario y, con el estudio local, registra el servidor MCP
+    del estudio con permiso solo para sus dos herramientas. Si la configuración del usuario no se puede leer,
+    se usa solo lo que pone la oficina."""
     e = _env(m)
-    if "arte" not in _skills_efectivas(m):
+    base = PERMISOS_OC.get(m.get("permission"), {})
+    estudio = "arte" in _skills_efectivas(m)
+    if not base and not estudio:
         return e
     try:
         cfg = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
     except ValueError:
-        return e
-    perm = cfg.get("permission", {})
-    mcp = cfg.get("mcp", {})
-    if not isinstance(cfg, dict) or not isinstance(perm, dict) or not isinstance(mcp, dict):
-        return e
-    cfg["mcp"] = {**mcp, "arte": {"type": "local", "command": _python_cmd() + [ARTE_MCP], "enabled": True}}
-    cfg["permission"] = {**perm, "arte_generar_imagen": "allow", "arte_estado": "allow"}
+        cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    perm = cfg.get("permission") if isinstance(cfg.get("permission"), dict) else {}
+    mcp = cfg.get("mcp") if isinstance(cfg.get("mcp"), dict) else {}
+    cfg["permission"] = {**perm, **base}
+    if estudio:
+        cfg["mcp"] = {**mcp, "arte": {"type": "local", "command": _python_cmd() + [ARTE_MCP], "enabled": True}}
+        cfg["permission"].update({"arte_generar_imagen": "allow", "arte_estado": "allow"})
     e["OPENCODE_CONFIG_CONTENT"] = json.dumps(cfg)
     return e
 

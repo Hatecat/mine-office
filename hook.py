@@ -13,7 +13,7 @@ def boss_inbox(d):
     """En la sesión del jefe (Claude en la carpeta personal), cada mensaje del usuario lleva pegadas las
     peticiones nuevas que le han hecho los agentes."""
     try:
-        with open(os.path.join(HERE, "data", "roster.json")) as f:
+        with open(os.path.join(os.environ.get("OFICINA_DATOS") or os.path.join(HERE, "data"), "roster.json")) as f:
             r = json.load(f)
     except (OSError, ValueError):
         return

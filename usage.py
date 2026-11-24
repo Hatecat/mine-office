@@ -17,7 +17,9 @@ from datetime import datetime
 HOME = os.path.expanduser("~")
 PROJECTS = os.path.join(HOME, ".claude", "projects")
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "data")
+import plataforma
+
+DATA = plataforma.DATA_DIR
 LEDGER_FILE = os.path.join(DATA, "usage.json")
 RUNS_FILE = os.path.join(DATA, "runs.jsonl")
 OPENCODE_DB = os.path.join(HOME, ".local", "share", "opencode", "opencode.db")
@@ -283,6 +285,12 @@ def _runs(limit=60):
         except ValueError:
             pass
     return out
+
+
+def gasto_hoy():
+    """Coste estimado de las órdenes de hoy (desde medianoche, hora local)."""
+    hoy = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    return round(sum(float(r.get("cost") or 0) for r in _runs(limit=100000) if (r.get("t") or 0) >= hoy), 4)
 
 
 def report(days=30):

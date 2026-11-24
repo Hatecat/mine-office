@@ -111,6 +111,52 @@ class AhorroTest(unittest.TestCase):
         self.assertEqual(m["model"], "openai/gpt-6.2-astra")
 
 
+class PresupuestoTest(unittest.TestCase):
+    def setUp(self):
+        import usage
+        self.tmp = tempfile.NamedTemporaryFile("w", delete=False, suffix=".jsonl")
+        self.tmp.close()
+        self.p = mock.patch.object(usage, "RUNS_FILE", self.tmp.name)
+        self.p.start()
+
+    def tearDown(self):
+        self.p.stop()
+        os.unlink(self.tmp.name)
+        ajustes.guardar({**ajustes.DEFECTO, "configurado": True})
+
+    def test_presupuesto_no_valido(self):
+        for malo in (-1, "mucho", 99999):
+            with self.assertRaises(ValueError):
+                ajustes.validar({"presupuestoDia": malo})
+        self.assertEqual(ajustes.validar({"presupuestoDia": "2.5"})["presupuestoDia"], 2.5)
+
+    def test_gasto_de_hoy_suma_solo_lo_de_hoy(self):
+        import json, time, usage
+        with open(self.tmp.name, "w") as f:
+            f.write(json.dumps({"t": time.time(), "cost": 1.25}) + "\n")
+            f.write(json.dumps({"t": time.time() - 3 * 86400, "cost": 9.0}) + "\n")
+        self.assertEqual(usage.gasto_hoy(), 1.25)
+
+    def test_frena_ordenes_de_pago_al_llegar_al_limite(self):
+        import usage
+        ajustes.guardar({**ajustes.DEFECTO, "presupuestoDia": 1.0, "configurado": True})
+        with mock.patch.object(usage, "gasto_hoy", return_value=1.5):
+            with self.assertRaises(ValueError):
+                roster._freno_presupuesto({"model": "claude-opus-5-5"})
+
+    def test_modelos_gratuitos_no_se_frenan(self):
+        import usage
+        ajustes.guardar({**ajustes.DEFECTO, "presupuestoDia": 1.0, "configurado": True})
+        with mock.patch.object(usage, "gasto_hoy", return_value=5.0):
+            roster._freno_presupuesto({"model": "opencode/big-pickle"})  # no lanza
+
+    def test_limite_cero_no_frena(self):
+        import usage
+        ajustes.guardar({**ajustes.DEFECTO, "presupuestoDia": 0, "configurado": True})
+        with mock.patch.object(usage, "gasto_hoy", return_value=500.0):
+            roster._freno_presupuesto({"model": "claude-opus-5-5"})
+
+
 class CuotaTest(unittest.TestCase):
     def test_detecta_limites_de_cuota(self):
         self.assertTrue(roster.is_quota_error("Error: usage limit reached for this key"))

@@ -19,6 +19,7 @@ DEFECTO = {
     "motores": {"claude": True, "opencode": True, "kimi": False},
     "ahorro": "normal",                        # gratis: en OpenCode, cambia a modelos gratuitos si el elegido es de pago
     "modeloLiberty": "claude-sonnet-5-5",      # modelo de Claude con el que responde la secretaria
+    "presupuestoDia": 5.0,                     # USD estimados al día en modelos de pago; 0 = sin límite
 }
 # Modelos de OpenCode gratuitos que no llevan «free» en el nombre (según models.dev)
 GRATIS_EXTRA = {"big-pickle"}
@@ -65,8 +66,15 @@ def validar(entrada):
     modelo = str(entrada.get("modeloLiberty", actual["modeloLiberty"])).strip()
     if not re.fullmatch(r"claude-[a-z0-9.\-]{3,60}", modelo):
         raise ValueError("Modelo de Liberty no válido")
+    try:
+        presupuesto = float(entrada.get("presupuestoDia", actual["presupuestoDia"]))
+    except (TypeError, ValueError):
+        raise ValueError("Presupuesto no válido") from None
+    if not 0 <= presupuesto <= 10000:
+        raise ValueError("Presupuesto no válido")
     return {"configurado": bool(entrada.get("configurado", actual["configurado"])),
-            "jefe": jefe, "motores": motores, "ahorro": ahorro, "modeloLiberty": modelo}
+            "jefe": jefe, "motores": motores, "ahorro": ahorro, "modeloLiberty": modelo,
+            "presupuestoDia": round(presupuesto, 2)}
 
 
 def detectar():

@@ -301,7 +301,7 @@ def snapshot():
 
 def boss_inbox():
     try:
-        with open(os.path.join(HERE, "data", "peticiones.json")) as f:
+        with open(os.path.join(plataforma.DATA_DIR, "peticiones.json")) as f:
             return [i for i in json.load(f)["items"] if i["estado"] == "pendiente"]
     except (OSError, ValueError, KeyError):
         return []
@@ -321,7 +321,7 @@ def mark_boss(boss, visitors):
              "status": "offline", "tool": None, "detail": "", "tokens": 0, "cwd": "~", **info}] + visitors
 
 
-EVENTS_FILE = os.path.join(HERE, "data", "events.jsonl")
+EVENTS_FILE = os.path.join(plataforma.DATA_DIR, "events.jsonl")
 ACKS = {}          # sid -> momento en que se vio el globo (o empezó una orden nueva)
 _tp_cache = {}
 
@@ -542,6 +542,7 @@ class Handler(BaseHTTPRequestHandler):
                 gratis = [m["id"] for m in roster.models()["opencode"] if ajustes.es_gratis(m["id"])]
                 return self.send_json({"ajustes": ajustes.cargar(), "detectados": ajustes.detectar(),
                                        "gratisOpenCode": gratis, "proveedores": ajustes.proveedores_opencode(),
+                                       "gastoHoy": usage.gasto_hoy(),
                                        "voz": voz.estado()})
             if path == "/api/chat":
                 from urllib.parse import unquote

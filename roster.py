@@ -587,6 +587,18 @@ def _aplicar_ahorro(m, sid):
     return {**m, "model": libre}
 
 
+def _freno_presupuesto(m):
+    """Si ya se gastó el presupuesto de hoy, no lanza órdenes de pago. Los modelos gratuitos siguen."""
+    limite = float(ajustes.cargar().get("presupuestoDia") or 0)
+    if limite <= 0 or ajustes.es_gratis(m.get("model")):
+        return
+    import usage
+    gasto = usage.gasto_hoy()
+    if gasto >= limite:
+        raise ValueError(f"Presupuesto diario alcanzado (${gasto:.2f} de ${limite:.2f}). Sube el límite en Ajustes "
+                         "o usa un modelo gratuito.")
+
+
 def send_order(mid, text, attempt=0, orig=None):
     text = str(text or "").strip()
     if not text:
@@ -594,6 +606,7 @@ def send_order(mid, text, attempt=0, orig=None):
     m = get_member(mid)
     if not m:
         raise ValueError("No existe ese miembro")
+    _freno_presupuesto(m)
     with _lock:
         cur = _runs.get(mid)
         if cur and not cur.done:

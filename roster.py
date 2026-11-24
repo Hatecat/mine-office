@@ -235,6 +235,8 @@ def upsert_member(data):
         }
         if "skills" in data:
             fields["skills"] = [k for k in (data.get("skills") or []) if k in SKILLS] if engine == "claude" else []
+        if "imagenes" in data:
+            fields["imagenes"] = "local" if data.get("imagenes") == "local" else "propio"
         if "job" in data:
             fields["job"] = str(data.get("job") or "").strip()[:40]
         if "role" in data:
@@ -342,7 +344,7 @@ def _persona(m):
             f"Tu personalidad: {m.get('personality') or 'profesional y amable'}. "
             "Mantén esta personalidad en tu forma de hablar sin dejar de ser útil, honesto y preciso. Responde en español."
             + JEFE_PROMPT.replace("{JEFE_NOMBRE}", ajustes.cargar()["jefe"])
-            + "".join("\n\n" + SKILLS[k]["prompt"] for k in m.get("skills") or [] if k in SKILLS))
+            + "".join("\n\n" + SKILLS[k]["prompt"] for k in _skills_efectivas(m) if k in SKILLS))
 
 
 def ensure_session(m):
@@ -409,12 +411,23 @@ def _env(m):
     return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR, OFICINA_PUERTO=str(plataforma.PUERTO))
 
 
+def _skills_efectivas(m):
+    """Habilidades reales del miembro. «imagenes» decide el estudio de arte: local lo activa, propio lo quita.
+    Sin el campo (miembros antiguos) se respeta la casilla de siempre."""
+    s = list(m.get("skills") or [])
+    if m.get("imagenes") == "local" and "arte" not in s:
+        s.append("arte")
+    if m.get("imagenes") == "propio":
+        s = [k for k in s if k != "arte"]
+    return s
+
+
 def _claude_args(m, interactive):
     sid = ensure_session(m)
     args = [plataforma.binario("claude")]
     args += ["--resume", sid] if claude_transcript(m) else ["--session-id", sid]
     args += ["-n", m["name"], "--append-system-prompt", persona(m), "--permission-mode", m.get("permission") or "default"]
-    allowed = VIRTUAL[m["id"]]["allowed"] if m.get("virtual") else [f"Bash(python3 {JEFE} pedir *)"] + [t for k in m.get("skills") or [] for t in SKILLS.get(k, {}).get("allowed", [])]
+    allowed = VIRTUAL[m["id"]]["allowed"] if m.get("virtual") else [f"Bash(python3 {JEFE} pedir *)"] + [t for k in _skills_efectivas(m) for t in SKILLS.get(k, {}).get("allowed", [])]
     if allowed:
         args += ["--allowedTools", *allowed]
     if m.get("model"):

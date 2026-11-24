@@ -210,6 +210,24 @@ class ModelosLocalesTest(unittest.TestCase):
         self.assertEqual(open(cfg, encoding="utf-8").read(), "{ esto no es json")
 
 
+class ImagenesTest(unittest.TestCase):
+    def test_local_activa_el_estudio(self):
+        self.assertIn("arte", roster._skills_efectivas({"imagenes": "local", "skills": []}))
+
+    def test_propio_quita_el_estudio(self):
+        self.assertNotIn("arte", roster._skills_efectivas({"imagenes": "propio", "skills": ["arte"]}))
+
+    def test_miembros_antiguos_mantienen_su_casilla(self):
+        self.assertIn("arte", roster._skills_efectivas({"skills": ["arte"]}))
+        self.assertEqual(roster._skills_efectivas({"skills": []}), [])
+
+    def test_el_prompt_del_estudio_solo_aparece_si_es_local(self):
+        base = {"name": "Ana", "job": "Artista", "team": "x", "personality": "", "skills": []}
+        with mock.patch.object(roster, "_team_name", return_value="Equipo"):
+            self.assertNotIn("estudio de arte", roster.persona({**base, "imagenes": "propio"}))
+            self.assertIn("estudio de arte", roster.persona({**base, "imagenes": "local"}))
+
+
 class CuotaTest(unittest.TestCase):
     def test_detecta_limites_de_cuota(self):
         self.assertTrue(roster.is_quota_error("Error: usage limit reached for this key"))

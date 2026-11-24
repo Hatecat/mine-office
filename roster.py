@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -46,6 +47,12 @@ SKILLS = {
     "arte": {
         "name": "Arte: imágenes (ComfyUI) y 3D (Hunyuan3D)",
         "allowed": [f"Bash(python3 {ARTE} {c} *)" for c in ("imagen", "modelo3d", "vista")] + [f"Bash(python3 {ARTE} estado)"],
+        "prompt_oc": (
+            "Tienes un estudio de arte en este PC con herramientas propias (servidor «arte»): "
+            "generar_imagen(prompt, ancho, alto, pasos, semilla, modelo) y estado. El prompt va en inglés, en tags "
+            "estilo Danbooru para Animagine, en una sola línea; ancho y alto son 512, 768 o 1024. "
+            "Espera a que termine: puede tardar varios minutos. Da al usuario la ruta de la imagen que te devuelva. "
+            "No hay modelos 3D en esta herramienta."),
         "prompt": (
             "Tienes un estudio de arte en este PC. Para usarlo ejecuta SIEMPRE con la herramienta Bash y timeout 600000:\n"
             f"- Imagen: python3 {ARTE} imagen \"tags en inglés estilo Danbooru\" [--ancho 1024 --alto 1024 --pasos 28 --semilla N]."
@@ -344,7 +351,8 @@ def _persona(m):
             f"Tu personalidad: {m.get('personality') or 'profesional y amable'}. "
             "Mantén esta personalidad en tu forma de hablar sin dejar de ser útil, honesto y preciso. Responde en español."
             + JEFE_PROMPT.replace("{JEFE_NOMBRE}", ajustes.cargar()["jefe"])
-            + "".join("\n\n" + SKILLS[k]["prompt"] for k in _skills_efectivas(m) if k in SKILLS))
+            + "".join("\n\n" + SKILLS[k].get("prompt_oc" if m.get("engine") == "opencode" else "prompt", SKILLS[k]["prompt"])
+                      for k in _skills_efectivas(m) if k in SKILLS))
 
 
 def ensure_session(m):
@@ -411,17 +419,41 @@ def _env(m):
     return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR, OFICINA_PUERTO=str(plataforma.PUERTO))
 
 
+ARTE_MCP = os.path.join(HERE, "tools", "arte", "arte_mcp.py")   # servidor MCP del estudio, para OpenCode
+
+
+def _python_cmd():
+    """Intérprete para lanzar el servidor MCP. En el exe empaquetado no vale sys.executable."""
+    if plataforma.FROZEN:
+        return ["py", "-3"] if plataforma.WIN else ["python3"]
+    return [sys.executable]
+
+
 def _env_oc(m):
-    """Entorno de OpenCode. No se le concede ningún permiso de comandos para el estudio de arte: el
-    comparador de reglas de OpenCode no está verificado frente a encadenados. El estudio local es solo de Claude."""
-    return _env(m)
+    """Entorno de OpenCode. Con el estudio local, registra el servidor MCP del estudio y permite sus dos
+    herramientas (argumentos tipados, sin shell). Si la configuración del usuario no se puede leer, no añade nada."""
+    e = _env(m)
+    if "arte" not in _skills_efectivas(m):
+        return e
+    try:
+        cfg = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
+    except ValueError:
+        return e
+    perm = cfg.get("permission", {})
+    mcp = cfg.get("mcp", {})
+    if not isinstance(cfg, dict) or not isinstance(perm, dict) or not isinstance(mcp, dict):
+        return e
+    cfg["mcp"] = {**mcp, "arte": {"type": "local", "command": _python_cmd() + [ARTE_MCP], "enabled": True}}
+    cfg["permission"] = {**perm, "arte_generar_imagen": "allow", "arte_estado": "allow"}
+    e["OPENCODE_CONFIG_CONTENT"] = json.dumps(cfg)
+    return e
 
 
 def _skills_efectivas(m):
     """Habilidades reales del miembro. «imagenes» decide el estudio de arte: local lo activa, propio lo quita.
     Sin el campo (miembros antiguos) se respeta la casilla de siempre."""
     s = list(m.get("skills") or [])
-    if m.get("engine") != "claude":
+    if m.get("engine") not in ("claude", "opencode"):
         return [k for k in s if k != "arte"]
     if m.get("imagenes") == "local" and "arte" not in s:
         s.append("arte")

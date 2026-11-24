@@ -212,27 +212,25 @@ class ModelosLocalesTest(unittest.TestCase):
 
 class ImagenesTest(unittest.TestCase):
     def test_local_activa_el_estudio(self):
-        self.assertIn("arte", roster._skills_efectivas({"imagenes": "local", "skills": []}))
+        self.assertIn("arte", roster._skills_efectivas({"engine": "claude", "imagenes": "local", "skills": []}))
 
     def test_propio_quita_el_estudio(self):
-        self.assertNotIn("arte", roster._skills_efectivas({"imagenes": "propio", "skills": ["arte"]}))
+        self.assertNotIn("arte", roster._skills_efectivas({"engine": "claude", "imagenes": "propio", "skills": ["arte"]}))
+
+    def test_opencode_nunca_recibe_el_estudio(self):
+        self.assertNotIn("arte", roster._skills_efectivas({"engine": "opencode", "skills": ["arte"], "imagenes": "local"}))
 
     def test_miembros_antiguos_mantienen_su_casilla(self):
-        self.assertIn("arte", roster._skills_efectivas({"skills": ["arte"]}))
-        self.assertEqual(roster._skills_efectivas({"skills": []}), [])
+        self.assertIn("arte", roster._skills_efectivas({"engine": "claude", "skills": ["arte"]}))
+        self.assertEqual(roster._skills_efectivas({"engine": "claude", "skills": []}), [])
 
-    def test_opencode_local_da_permiso_solo_al_arte(self):
-        import json as _j
+    def test_opencode_no_recibe_permisos_del_estudio(self):
         env = roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "local", "skills": [], "permission": "default"})
-        permiso = _j.loads(env["OPENCODE_CONFIG_CONTENT"])["permission"]["bash"]
-        permitidos = [k for k, v in permiso.items() if v == "allow"]
-        self.assertTrue(all("arte.py" in k and not k.endswith(" *") or " imagen " in k or " modelo3d " in k or " vista " in k or k.endswith(" estado") for k in permitidos))
-        self.assertFalse(any(k.endswith("arte.py *") for k in permitidos))
-        self.assertEqual(permiso["*;*"], "deny")
-        self.assertNotIn("OPENCODE_CONFIG_CONTENT", roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "propio", "skills": []}))
+        self.assertNotIn("OPENCODE_CONFIG_CONTENT", env)
+        self.assertNotIn("arte", roster._skills_efectivas({"engine": "opencode", "imagenes": "local", "skills": []}))
 
     def test_el_prompt_del_estudio_solo_aparece_si_es_local(self):
-        base = {"name": "Ana", "job": "Artista", "team": "x", "personality": "", "skills": []}
+        base = {"name": "Ana", "job": "Artista", "team": "x", "personality": "", "skills": [], "engine": "claude"}
         with mock.patch.object(roster, "_team_name", return_value="Equipo"):
             self.assertNotIn("estudio de arte", roster.persona({**base, "imagenes": "propio"}))
             self.assertIn("estudio de arte", roster.persona({**base, "imagenes": "local"}))

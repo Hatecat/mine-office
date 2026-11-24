@@ -641,7 +641,7 @@ def main(argv=None):
     roster.start_watchdog()
     start_stuck_watch()
     secretaria.start()
-    print(f"Oficina de agentes en http://127.0.0.1:{a.port}", flush=True)
+    print(f"MineOffice en http://127.0.0.1:{a.port}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
 
 

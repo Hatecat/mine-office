@@ -48,6 +48,18 @@ class AjustesTest(unittest.TestCase):
         self.assertFalse(ajustes.es_gratis("openai/gpt-6.2-astra"))
         self.assertFalse(ajustes.es_gratis(None))
 
+    def test_modelo_de_liberty_se_valida_y_se_guarda(self):
+        limpio = ajustes.validar({"modeloLiberty": "claude-haiku-5-5"})
+        self.assertEqual(limpio["modeloLiberty"], "claude-haiku-5-5")
+        with self.assertRaises(ValueError):
+            ajustes.validar({"modeloLiberty": "gpt-6; rm -rf /"})
+
+    def test_liberty_usa_el_modelo_elegido(self):
+        ajustes.guardar({**ajustes.DEFECTO, "modeloLiberty": "claude-haiku-5-5", "configurado": True})
+        with mock.patch.object(roster, "load", return_value={"members": [], "virtual": {}}):
+            self.assertEqual(roster.virtual_member("liberty")["model"], "claude-haiku-5-5")
+        ajustes.guardar({**ajustes.DEFECTO, "configurado": True})
+
     def test_proveedores_opencode_lee_los_guardados(self):
         salida = ("GitHub Copilot  GitHub Copilot   stored\n"
                   "Groq            Groq             stored\n"

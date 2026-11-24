@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Empaquetado para Windows (y Linux): pyinstaller --noconfirm oficina.spec
-# Resultado en dist/OficinaDeAgentes/ (carpeta que se comprime y se reparte).
+# Resultado en dist/MineOffice/ (carpeta que se comprime y se reparte).
 a = Analysis(
     ["oficina_app.py"],
     pathex=["."],
@@ -20,7 +20,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="OficinaDeAgentes",
+    name="MineOffice",
     console=True,          # con consola: los errores se ven. Cámbialo a False cuando esté probado.
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="OficinaDeAgentes")
+coll = COLLECT(exe, a.binaries, a.datas, name="MineOffice")

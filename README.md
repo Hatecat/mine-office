@@ -31,9 +31,9 @@ Los ajustes se guardan en `data/ajustes.json`.
 
 ## Windows
 
-Hay un workflow (`.github/workflows/windows.yml`) que genera `OficinaDeAgentes-windows.zip` con PyInstaller. Para probarlo en tu PC:
+Hay un workflow (`.github/workflows/windows.yml`) que genera `MineOffice-windows.zip` con PyInstaller. Para probarlo en tu PC:
 
-1. Descomprime el zip y ejecuta `OficinaDeAgentes.exe`. Se abre la oficina en el navegador.
+1. Descomprime el zip y ejecuta `MineOffice.exe`. Se abre la oficina en el navegador.
 2. Los datos (`data/`) quedan junto al ejecutable.
 3. Los agentes necesitan Python 3 para `tools/jefe.py` y los hooks. Instálalo desde python.org y comprueba que `python` o `py` responden en la terminal.
 4. Claude Code y OpenCode deben estar instalados y en el `PATH`.

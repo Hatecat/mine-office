@@ -195,7 +195,8 @@ def virtual_member(mid, r=None):
     r = r or load()
     sid = (r.get("virtual") or {}).get(mid, {}).get("sessionId")
     nombre = ajustes.cargar()["jefe"] if mid == "jefe" else v["name"]
-    return {"id": mid, "name": nombre, "job": v["job"], "engine": "claude", "model": v["model"], "cwd": v["cwd"],
+    modelo = ajustes.cargar()["modeloLiberty"] if mid == "liberty" else v["model"]
+    return {"id": mid, "name": nombre, "job": v["job"], "engine": "claude", "model": modelo, "cwd": v["cwd"],
             "permission": v.get("permission", "default"), "team": None, "virtual": True, "sessionId": sid}
 
 

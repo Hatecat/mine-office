@@ -18,6 +18,7 @@ DEFECTO = {
     "jefe": "Claude",
     "motores": {"claude": True, "opencode": True, "kimi": False},
     "ahorro": "normal",                        # gratis: en OpenCode, cambia a modelos gratuitos si el elegido es de pago
+    "modeloLiberty": "claude-sonnet-5-5",      # modelo de Claude con el que responde la secretaria
 }
 # Modelos de OpenCode gratuitos que no llevan «free» en el nombre (según models.dev)
 GRATIS_EXTRA = {"big-pickle"}
@@ -61,8 +62,11 @@ def validar(entrada):
     ahorro = entrada.get("ahorro", actual["ahorro"])
     if ahorro not in AHORROS:
         raise ValueError("Modo de ahorro no válido")
+    modelo = str(entrada.get("modeloLiberty", actual["modeloLiberty"])).strip()
+    if not re.fullmatch(r"claude-[a-z0-9.\-]{3,60}", modelo):
+        raise ValueError("Modelo de Liberty no válido")
     return {"configurado": bool(entrada.get("configurado", actual["configurado"])),
-            "jefe": jefe, "motores": motores, "ahorro": ahorro}
+            "jefe": jefe, "motores": motores, "ahorro": ahorro, "modeloLiberty": modelo}
 
 
 def detectar():

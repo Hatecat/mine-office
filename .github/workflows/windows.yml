@@ -19,8 +19,8 @@ jobs:
         run: pyinstaller --noconfirm oficina.spec
       - name: Comprimir
         shell: pwsh
-        run: Compress-Archive -Path dist/OficinaDeAgentes -DestinationPath OficinaDeAgentes-windows.zip
+        run: Compress-Archive -Path dist/MineOffice -DestinationPath MineOffice-windows.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: OficinaDeAgentes-windows
-          path: OficinaDeAgentes-windows.zip
+          name: MineOffice-windows
+          path: MineOffice-windows.zip

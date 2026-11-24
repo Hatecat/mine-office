@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Oficina de agentes</title>
+<title>MineOffice</title>
 <meta name="office-token" content="__OFFICE_TOKEN__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
@@ -143,7 +143,7 @@
 <div id="view"></div>
 <div id="help">arrastra: girar · clic derecho: mover · rueda: zoom · clic: seguir agente</div>
 <aside id="panel">
-  <header><h1>Oficina de agentes</h1><div id="summary">conectando…</div>
+  <header><h1>MineOffice</h1><div id="summary">conectando…</div>
     <div class="hdr-actions"><button id="btnHire" class="mini">+ Contratar</button><button id="btnTeam" class="mini">+ Equipo</button><button id="btnCosts" class="mini">$ Gastos</button><button id="btnAjustes" class="mini" title="Nombre del jefe, motores y modo de ahorro">⚙ Ajustes</button><button id="btnVoice" class="mini" title="Liberty, la secretaria, dice en voz alta cuando un agente te necesita">♪ Voz</button><button id="btnListen" class="mini" title="Liberty escucha el micrófono: empieza la frase con «Liberty…»">🎙 Escucha</button></div></header>
   <div id="list"></div>
   <section id="chat">
@@ -176,6 +176,8 @@
       <p class="hint">Con «Preferir gratis», los agentes de OpenCode usan un modelo gratuito cuando el suyo es de pago. Los de Claude no cambian: van con tu suscripción.</p>
       <p class="hint" id="sGratis"></p>
       <p class="hint" id="sProv"></p>
+      <label for="sLiberty">Modelo de Liberty</label><select id="sLiberty"></select>
+      <p class="hint">Con qué modelo de Claude responde la secretaria. Los cambios valen desde su siguiente respuesta.</p>
       <label>Voz de la secretaria</label>
       <p class="hint" id="vozEstado"></p>
       <div><button type="button" class="mini" id="vozBtn">Descargar voz</button></div>

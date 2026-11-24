@@ -45,7 +45,7 @@ ARTE = os.path.join(HERE, "tools", "arte", "arte.py")
 SKILLS = {
     "arte": {
         "name": "Arte: imágenes (ComfyUI) y 3D (Hunyuan3D)",
-        "allowed": [f"Bash(python3 {ARTE} *)"],
+        "allowed": [f"Bash(python3 {ARTE} {c} *)" for c in ("imagen", "modelo3d", "vista")] + [f"Bash(python3 {ARTE} estado)"],
         "prompt": (
             "Tienes un estudio de arte en este PC. Para usarlo ejecuta SIEMPRE con la herramienta Bash y timeout 600000:\n"
             f"- Imagen: python3 {ARTE} imagen \"tags en inglés estilo Danbooru\" [--ancho 1024 --alto 1024 --pasos 28 --semilla N]."
@@ -411,11 +411,46 @@ def _env(m):
     return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR, OFICINA_PUERTO=str(plataforma.PUERTO))
 
 
+ARTE_CMDS = ("imagen", "modelo3d", "vista")
+# Caracteres que encadenan, redirigen o sustituyen comandos: nunca se aprueban por el estudio
+_METACARACTERES = ["*;*", "*&*", "*|*", "*$(*", "*`*", "*>*", "*<*", "*\n*"]
+
+
 def _env_oc(m):
-    """Entorno de OpenCode. Con el estudio local, da permiso solo a ese comando (sin --auto)."""
+    """Entorno de OpenCode. Con el estudio local, aprueba solo los subcomandos de arte.py y niega
+    cualquier encadenado o redirección. Si ya hay una OPENCODE_CONFIG_CONTENT del usuario, se fusiona;
+    si no se puede leer, no se aprueba nada (falla cerrado)."""
     e = _env(m)
-    if "arte" in _skills_efectivas(m):
-        e["OPENCODE_CONFIG_CONTENT"] = json.dumps({"permission": {"bash": {f"python3 {ARTE} *": "allow"}}})
+    if "arte" not in _skills_efectivas(m):
+        return e
+    try:
+        cfg = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
+    except ValueError:
+        return e
+    if not isinstance(cfg, dict):
+        return e
+    perm = cfg.get("permission", {})
+    if not isinstance(perm, dict):
+        return e
+    bash = perm.get("bash", {})
+    if not isinstance(bash, dict):
+        return e
+    reglas = {f"python3 {ARTE} {c} *": "allow" for c in ARTE_CMDS}
+    reglas[f"python3 {ARTE} estado"] = "allow"
+    reglas.update({pat: "deny" for pat in _METACARACTERES})
+    cfg["permission"] = {**perm, "bash": {**bash, **reglas}}
+    e["OPENCODE_CONFIG_CONTENT"] = json.dumps(cfg)
+    return e
+    try:
+        cfg = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
+    except ValueError:
+        return e
+    bash = (cfg.setdefault("permission", {}).get("bash") or {}) if isinstance(cfg.get("permission"), dict) else {}
+    reglas = {f"python3 {ARTE} {c} *": "allow" for c in ARTE_CMDS}
+    reglas[f"python3 {ARTE} estado"] = "allow"
+    reglas.update({p: "deny" for p in _METACARACTERES})
+    cfg["permission"] = {**cfg.get("permission", {}), "bash": {**(bash if isinstance(bash, dict) else {}), **reglas}}
+    e["OPENCODE_CONFIG_CONTENT"] = json.dumps(cfg)
     return e
 
 

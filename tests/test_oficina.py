@@ -225,8 +225,10 @@ class ImagenesTest(unittest.TestCase):
         import json as _j
         env = roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "local", "skills": [], "permission": "default"})
         permiso = _j.loads(env["OPENCODE_CONFIG_CONTENT"])["permission"]["bash"]
-        self.assertEqual(list(permiso.values()), ["allow"])
-        self.assertIn("arte.py", list(permiso)[0])
+        permitidos = [k for k, v in permiso.items() if v == "allow"]
+        self.assertTrue(all("arte.py" in k and not k.endswith(" *") or " imagen " in k or " modelo3d " in k or " vista " in k or k.endswith(" estado") for k in permitidos))
+        self.assertFalse(any(k.endswith("arte.py *") for k in permitidos))
+        self.assertEqual(permiso["*;*"], "deny")
         self.assertNotIn("OPENCODE_CONFIG_CONTENT", roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "propio", "skills": []}))
 
     def test_el_prompt_del_estudio_solo_aparece_si_es_local(self):

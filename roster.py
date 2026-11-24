@@ -411,6 +411,14 @@ def _env(m):
     return dict(os.environ, OFFICE_MEMBER=m["id"], OFICINA_DATOS=plataforma.DATA_DIR, OFICINA_PUERTO=str(plataforma.PUERTO))
 
 
+def _env_oc(m):
+    """Entorno de OpenCode. Con el estudio local, da permiso solo a ese comando (sin --auto)."""
+    e = _env(m)
+    if "arte" in _skills_efectivas(m):
+        e["OPENCODE_CONFIG_CONTENT"] = json.dumps({"permission": {"bash": {f"python3 {ARTE} *": "allow"}}})
+    return e
+
+
 def _skills_efectivas(m):
     """Habilidades reales del miembro. «imagenes» decide el estudio de arte: local lo activa, propio lo quita.
     Sin el campo (miembros antiguos) se respeta la casilla de siempre."""
@@ -654,7 +662,8 @@ def send_order(mid, text, attempt=0, orig=None):
             args += [msg]
         if not shutil.which(args[0]):
             raise ValueError(f"No encuentro el programa {args[0]}")
-        proc = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, env=_env(m),
+        env = _env_oc(m) if m["engine"] == "opencode" else _env(m)
+        proc = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, env=env,
                                 stderr=subprocess.STDOUT, text=True, **plataforma.new_group_kwargs())
         run = _runs[mid] = Run(m, proc)
         run.prompt = text; run.attempt = attempt; run.orig = orig or text

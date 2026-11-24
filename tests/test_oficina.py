@@ -221,6 +221,14 @@ class ImagenesTest(unittest.TestCase):
         self.assertIn("arte", roster._skills_efectivas({"skills": ["arte"]}))
         self.assertEqual(roster._skills_efectivas({"skills": []}), [])
 
+    def test_opencode_local_da_permiso_solo_al_arte(self):
+        import json as _j
+        env = roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "local", "skills": [], "permission": "default"})
+        permiso = _j.loads(env["OPENCODE_CONFIG_CONTENT"])["permission"]["bash"]
+        self.assertEqual(list(permiso.values()), ["allow"])
+        self.assertIn("arte.py", list(permiso)[0])
+        self.assertNotIn("OPENCODE_CONFIG_CONTENT", roster._env_oc({"id": "x", "engine": "opencode", "imagenes": "propio", "skills": []}))
+
     def test_el_prompt_del_estudio_solo_aparece_si_es_local(self):
         base = {"name": "Ana", "job": "Artista", "team": "x", "personality": "", "skills": []}
         with mock.patch.object(roster, "_team_name", return_value="Equipo"):
